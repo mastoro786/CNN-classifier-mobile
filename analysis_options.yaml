@@ -1,0 +1,34 @@
+# Flutter Analysis Options
+# Configured for Audio Classifier App
+
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Allow prints for debugging/logging
+    avoid_print: false
+    
+    # Prefer const where possible
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    
+    # Don't require keys (using super.key pattern)
+    use_key_in_widget_constructors: false
+    
+    # Allow dynamic for flexibility
+    avoid_dynamic_calls: false
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/generated/**"
+  
+  errors:
+    # Suppress info-level issues
+    todo: ignore
+    unnecessary_import: ignore
+    
+    # Deprecation warnings from Flutter SDK - downgrade to info
+    deprecated_member_use: ignore
+    deprecated_member_use_from_same_package: ignore

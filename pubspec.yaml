@@ -1,0 +1,47 @@
+name: audio_classifier_app
+description: Offline audio classification for schizophrenia detection - RSJD dr. Amino Gondohutomo
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  provider: ^6.0.0
+  
+  # TensorFlow Lite
+  tflite_flutter: ^0.9.0
+  
+  # Audio Recording & Processing
+  record: ^5.0.0
+  path_provider: ^2.0.0
+  permission_handler: ^11.0.0
+  
+  # Audio Analysis (FFT)
+  fftea: ^1.0.0
+  
+  # UI Components
+  fl_chart: ^0.60.0
+  percent_indicator: ^4.2.0
+  audio_waveforms: ^1.0.0
+  
+  # Utilities
+  intl: ^0.18.0
+  shared_preferences: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # Add your .tflite model here
+  assets:
+    - assets/models/audio_classifier_quantized.tflite
+    - assets/models/label_map.txt

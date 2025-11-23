@@ -1,11 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../services/audio_recording_service.dart';
+import '../services/audio_file_service.dart';
 import '../services/classifier_service.dart';
 
 /// Provider for managing audio recording and classification state
 class AudioProvider extends ChangeNotifier {
   final AudioRecordingService _recordingService = AudioRecordingService();
+  final AudioFileService _fileService = AudioFileService();
   
   bool _isRecording = false;
   bool _isProcessing = false;
@@ -75,6 +77,44 @@ class AudioProvider extends ChangeNotifier {
   void setError(String error) {
     _error = error;
     notifyListeners();
+  }
+  
+  /// Pick and load audio file
+  Future<Float32List?> pickAudioFile() async {
+    try {
+      _error = null;
+      notifyListeners();
+      
+      // Pick file
+      final file = await _fileService.pickAudioFile();
+      if (file == null) {
+        return null;
+      }
+      
+      // Validate file
+      final isValid = await _fileService.validateAudioFile(file);
+      if (!isValid) {
+        _error = 'Invalid audio file. Please select a WAV file (max 10 MB).';
+        notifyListeners();
+        return null;
+      }
+      
+      // Load audio data
+      final audioSamples = await _fileService.loadAudioFile(file);
+      if (audioSamples == null) {
+        _error = 'Failed to load audio file';
+        notifyListeners();
+        return null;
+      }
+      
+      _lastAudioSamples = audioSamples;
+      notifyListeners();
+      return audioSamples;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
   }
   
   @override

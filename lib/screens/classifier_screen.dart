@@ -5,6 +5,7 @@ import '../providers/audio_provider.dart';
 import '../widgets/gradient_header.dart';
 import '../widgets/result_card.dart';
 import '../widgets/recording_button.dart';
+import '../widgets/upload_button.dart';
 
 class ClassifierScreen extends StatefulWidget {
   const ClassifierScreen({super.key});
@@ -103,13 +104,81 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            // Record audio button
                             RecordingButton(
                               isRecording: audioProvider.isRecording,
                               isProcessing: audioProvider.isProcessing,
                               onPressed: () => _handleRecording(audioProvider),
                               pulseController: _pulseController,
                             ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Divider with text
+                            Row(
+                              children: [
+                                const Expanded(child: Divider()),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                const Expanded(child: Divider()),
+                              ],
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Upload audio button
+                            UploadButton(
+                              isProcessing: audioProvider.isProcessing,
+                              onPressed: () => _handleFileUpload(audioProvider),
+                            ),
+                            
+                            const SizedBox(height: 12),
+                            
+                            // Info about supported formats
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.blue.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Supported formats: WAV (16-bit PCM)\nMax file size: 10 MB',
+                                      style: TextStyle(
+                                        color: Colors.blue.shade900,
+                                        fontSize: 12,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
                             const SizedBox(height: 24),
+                            
+                            // Results
                             if (audioProvider.result != null)
                               ResultCard(result: audioProvider.result!),
                             if (audioProvider.error != null)
@@ -150,6 +219,69 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _handleFileUpload(AudioProvider audioProvider) async {
+    if (audioProvider.isProcessing) return;
+
+    try {
+      // Clear previous results
+      audioProvider.clearResult();
+
+      // Pick and load audio file
+      final audioData = await audioProvider.pickAudioFile();
+
+      if (audioData == null) {
+        return;
+      }
+
+      // Show processing
+      audioProvider.setProcessing(true);
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Analyzing audio...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Run classification
+      try {
+        final result = await _classifier.classify(audioData);
+        audioProvider.setResult(result);
+      } catch (e) {
+        audioProvider.setError('Classification error: $e');
+      } finally {
+        audioProvider.setProcessing(false);
+        if (mounted) {
+          Navigator.pop(context); // Close processing dialog
+        }
+      }
+    } catch (e) {
+      audioProvider.setError('File upload error: $e');
+      audioProvider.setProcessing(false);
+    }
   }
 
   Future<void> _handleRecording(AudioProvider audioProvider) async {

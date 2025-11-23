@@ -10,6 +10,7 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 
 ✅ **Offline AI Classification** - No internet required  
 ✅ **Real-time Audio Recording** - 5-second samples  
+✅ **Audio File Upload** - Support WAV format (16-bit PCM)  
 ✅ **Mel Spectrogram Analysis** - Advanced audio feature extraction  
 ✅ **TensorFlow Lite Inference** - Optimized CNN model  
 ✅ **Beautiful UI** - Modern Material 3 design  
@@ -21,9 +22,9 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 ## 🏗️ Architecture
 
 ```
-Audio Input (Microphone)
+Audio Input (Microphone OR Upload File)
     ↓
-WAV Recording (22.05 kHz, Mono)
+WAV Recording/File (22.05 kHz, Mono, 16-bit PCM)
     ↓
 Mel Spectrogram Extraction (128 x 216)
     ↓
@@ -82,11 +83,13 @@ lib/
 ├── widgets/
 │   ├── gradient_header.dart     # App branding header
 │   ├── recording_button.dart    # Recording button with animation
+│   ├── upload_button.dart       # Upload file button
 │   └── result_card.dart         # Results display card
 ├── services/
 │   ├── audio_processor.dart     # Mel Spectrogram extraction
 │   ├── classifier_service.dart  # TFLite inference
-│   └── audio_recording_service.dart  # Audio recording
+│   ├── audio_recording_service.dart  # Audio recording
+│   └── audio_file_service.dart  # Audio file loading & parsing
 └── providers/
     └── audio_provider.dart      # State management
 
@@ -107,9 +110,14 @@ assets/models/
 
 ### Key Components
 1. **Gradient Header** - Beautiful header with app branding
-2. **Recording Button** - Animated button with pulse effect
-3. **Result Card** - Gauge chart + probability bars
-4. **Processing Dialog** - Loading animation during inference
+2. **Recording Button** - Animated button with pulse effect (Purple gradient)
+3. **Upload Button** - File picker for WAV files (Green gradient)
+4. **Result Card** - Gauge chart + probability bars
+5. **Processing Dialog** - Loading animation during inference
+
+### Input Methods
+- **🎙️ Microphone Recording**: Tap "Start Recording" → Record 5 seconds
+- **📁 File Upload**: Tap "Upload Audio File" → Select WAV file (max 10 MB)
 
 ---
 
@@ -196,14 +204,23 @@ Manually grant microphone permission di Settings > Apps > Audio Classifier > Per
 ## 📱 Screenshots
 
 ### Main Screen
-- Beautiful gradient header
-- Recording button with pulse animation
+- Beautiful gradient header with app branding
+- Recording button with pulse animation (purple)
+- Upload button for file selection (green)
+- Divider with "OR" between two input options
+- Info card showing supported formats
 - Clean, modern interface
 
-### Recording
+### Recording Mode
 - Real-time countdown (5 seconds)
 - Animated microphone icon
 - Progress indicator
+
+### Upload Mode
+- File picker dialog
+- Support WAV format (16-bit PCM)
+- Max file size: 10 MB
+- Automatic validation
 
 ### Results
 - Circular gauge with confidence percentage
@@ -236,16 +253,36 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ---
 
-## 🎯 Next Steps
+## 🎯 Development Progress
 
 1. ✅ Flutter project structure created
 2. ✅ TFLite model integrated
 3. ✅ Audio processing implemented
 4. ✅ Beautiful UI designed
 5. ✅ Permissions configured
-6. 🔄 Testing on real devices
-7. 🔄 Performance optimization
-8. 🔄 Clinical validation
+6. ✅ Audio file upload feature added
+7. ✅ WAV file parser implemented
+8. 🔄 Testing on real devices
+9. 🔄 Performance optimization
+10. 🔄 Clinical validation
+
+---
+
+## 🆕 Recent Updates
+
+### v1.1.0 (Latest)
+- ✨ **NEW**: Audio file upload functionality
+- ✨ **NEW**: WAV file parser (16-bit PCM support)
+- ✨ **NEW**: File validation (format & size)
+- 🎨 Added upload button with green gradient
+- 🎨 Added info card for supported formats
+- 🐛 Fixed Kotlin incremental compilation issues
+- 📦 Updated dependencies (file_picker v8.0.0)
+
+### v1.0.0 (Initial)
+- 🎉 Initial release with recording feature
+- 🧠 TFLite CNN model integration
+- 🎨 Beautiful Material 3 UI design
 
 ---
 

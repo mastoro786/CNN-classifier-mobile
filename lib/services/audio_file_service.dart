@@ -10,8 +10,7 @@ class AudioFileService {
       print('📁 Opening file picker...');
       
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['wav', 'ogg'],
+        type: FileType.any,
         allowMultiple: false,
       );
       
@@ -91,19 +90,19 @@ class AudioFileService {
     try {
       // Parse WAV header
       if (bytes.length < 44) {
-        throw FormatException('Invalid WAV file: too short');
+        throw const FormatException('Invalid WAV file: too short');
       }
       
       // Check RIFF header
       final riffHeader = String.fromCharCodes(bytes.sublist(0, 4));
       if (riffHeader != 'RIFF') {
-        throw FormatException('Invalid WAV file: missing RIFF header');
+        throw const FormatException('Invalid WAV file: missing RIFF header');
       }
       
       // Check WAVE format
       final waveFormat = String.fromCharCodes(bytes.sublist(8, 12));
       if (waveFormat != 'WAVE') {
-        throw FormatException('Invalid WAV file: missing WAVE format');
+        throw const FormatException('Invalid WAV file: missing WAVE format');
       }
       
       // Find data chunk
@@ -124,7 +123,7 @@ class AudioFileService {
       }
       
       if (dataSize == 0) {
-        throw FormatException('Invalid WAV file: no data chunk found');
+        throw const FormatException('Invalid WAV file: no data chunk found');
       }
       
       print('   WAV data chunk found at offset $dataOffset, size: $dataSize bytes');

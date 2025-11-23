@@ -8,6 +8,9 @@ import 'package:permission_handler/permission_handler.dart';
 class AudioRecordingService {
   final _recorder = AudioRecorder();
   String? _recordingPath;
+  String? _lastRecordingPath;
+  
+  String? get lastRecordingPath => _lastRecordingPath;
   
   /// Check if microphone permission is granted
   Future<bool> checkPermission() async {
@@ -82,8 +85,8 @@ class AudioRecordingService {
       
       print('📊 Audio samples: ${audioSamples.length}');
       
-      // Clean up
-      await file.delete();
+      // Save path for playback (don't delete file yet)
+      _lastRecordingPath = path;
       
       return audioSamples;
     } catch (e) {

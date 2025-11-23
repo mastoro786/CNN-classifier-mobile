@@ -179,8 +179,13 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                             const SizedBox(height: 24),
                             
                             // Results
-                            if (audioProvider.result != null)
+                            if (audioProvider.result != null) ...[
                               ResultCard(result: audioProvider.result!),
+                              const SizedBox(height: 16),
+                              // Playback controls
+                              if (audioProvider.lastAudioFilePath != null)
+                                _buildPlaybackCard(audioProvider),
+                            ],
                             if (audioProvider.error != null)
                               _buildErrorCard(audioProvider.error!),
                           ],
@@ -191,6 +196,91 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildPlaybackCard(AudioProvider audioProvider) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Play/Pause button
+          Material(
+            color: Colors.white,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: () => audioProvider.togglePlayPause(),
+              customBorder: const CircleBorder(),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Icon(
+                  audioProvider.isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: const Color(0xFF667EEA),
+                  size: 32,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Text
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Audio Playback',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  audioProvider.isPlaying ? 'Playing...' : 'Tap to play audio',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Stop button
+          if (audioProvider.isPlaying)
+            Material(
+              color: Colors.white.withOpacity(0.2),
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: () => audioProvider.stopAudio(),
+                customBorder: const CircleBorder(),
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(
+                    Icons.stop,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -243,20 +333,51 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
+        builder: (context) => Center(
           child: Card(
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text(
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 6,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.graphic_eq,
+                        color: Theme.of(context).primaryColor,
+                        size: 30,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
                     'Analyzing audio...',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Processing AI model',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],
@@ -322,20 +443,51 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
+        builder: (context) => Center(
           child: Card(
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text(
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 6,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.graphic_eq,
+                        color: Theme.of(context).primaryColor,
+                        size: 30,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
                     'Analyzing audio...',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Processing AI model',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],

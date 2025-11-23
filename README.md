@@ -11,9 +11,10 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 ✅ **Offline AI Classification** - No internet required  
 ✅ **Real-time Audio Recording** - 5-second samples  
 ✅ **Audio File Upload** - Support WAV format (16-bit PCM)  
+✅ **Audio Playback** - Play recorded or uploaded audio  
 ✅ **Mel Spectrogram Analysis** - Advanced audio feature extraction  
 ✅ **TensorFlow Lite Inference** - Optimized CNN model  
-✅ **Beautiful UI** - Modern Material 3 design  
+✅ **Beautiful UI** - Modern Material 3 design with loading animations  
 ✅ **High Accuracy** - Trained on clinical datasets  
 ✅ **Fast Processing** - Results in milliseconds  
 
@@ -26,6 +27,8 @@ Audio Input (Microphone OR Upload File)
     ↓
 WAV Recording/File (22.05 kHz, Mono, 16-bit PCM)
     ↓
+[Loading Spinner Animation]
+    ↓
 Mel Spectrogram Extraction (128 x 216)
     ↓
 TensorFlow Lite CNN Model
@@ -33,6 +36,8 @@ TensorFlow Lite CNN Model
 Binary Classification (Normal / Skizofrenia)
     ↓
 Results Display with Confidence Score
+    ↓
+Audio Playback Controls (Play/Pause/Stop)
 ```
 
 ---
@@ -89,7 +94,8 @@ lib/
 │   ├── audio_processor.dart     # Mel Spectrogram extraction
 │   ├── classifier_service.dart  # TFLite inference
 │   ├── audio_recording_service.dart  # Audio recording
-│   └── audio_file_service.dart  # Audio file loading & parsing
+│   ├── audio_file_service.dart  # Audio file loading & parsing
+│   └── audio_playback_service.dart  # Audio playback controls
 └── providers/
     └── audio_provider.dart      # State management
 
@@ -111,13 +117,20 @@ assets/models/
 ### Key Components
 1. **Gradient Header** - Beautiful header with app branding
 2. **Recording Button** - Animated button with pulse effect (Purple gradient)
-3. **Upload Button** - File picker for WAV files (Green gradient)
+3. **Upload Button** - File picker for audio files (Green gradient)
 4. **Result Card** - Gauge chart + probability bars
-5. **Processing Dialog** - Loading animation during inference
+5. **Processing Dialog** - Animated loading spinner with graphic equalizer icon
+6. **Playback Card** - Audio player with Play/Pause/Stop controls (Purple gradient)
 
 ### Input Methods
-- **🎙️ Microphone Recording**: Tap "Start Recording" → Record 5 seconds
-- **📁 File Upload**: Tap "Upload Audio File" → Select WAV file (max 10 MB)
+- **🎙️ Microphone Recording**: Tap "Start Recording" → Record 5 seconds → Auto classification
+- **📁 File Upload**: Tap "Upload Audio File" → Select audio file from device → Auto classification
+
+### Playback Feature
+- **🔊 Play Audio**: Automatically available after recording or upload
+- **⏸️ Pause/Resume**: Toggle playback during listening
+- **⏹️ Stop**: Stop audio playback anytime
+- **Works with both**: Recorded audio and uploaded files
 
 ---
 
@@ -217,16 +230,30 @@ Manually grant microphone permission di Settings > Apps > Audio Classifier > Per
 - Progress indicator
 
 ### Upload Mode
-- File picker dialog
+- File picker dialog with all file types visible
 - Support WAV format (16-bit PCM)
 - Max file size: 10 MB
-- Automatic validation
+- Automatic format validation
+- File extension: .wav, .ogg (WAV recommended)
+
+### Processing
+- Animated loading spinner with graphic equalizer icon
+- "Analyzing audio..." message
+- "Processing AI model" subtitle
+- Beautiful card design with elevation
 
 ### Results
 - Circular gauge with confidence percentage
 - Horizontal probability bars
 - Color-coded results (Green=Normal, Red=Skizofrenia)
 - Processing time display
+
+### Playback Controls
+- Purple gradient card with play button
+- Play/Pause toggle button
+- Stop button (appears during playback)
+- Status indicator: "Playing..." or "Tap to play audio"
+- Works seamlessly with both input methods
 
 ---
 
@@ -270,7 +297,16 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ## 🆕 Recent Updates
 
-### v1.1.0 (Latest)
+### v1.2.0 (Latest)
+- ✨ **NEW**: Audio playback feature for recorded and uploaded files
+- ✨ **NEW**: Play/Pause/Stop controls with purple gradient card
+- ✨ **NEW**: Enhanced loading spinner with graphic equalizer animation
+- 🎨 Improved processing dialog UI with elevation and rounded corners
+- 🐛 Fixed file picker filter to show all audio files (.wav, .ogg)
+- 📦 Added audioplayers dependency (v6.0.0)
+- 🚀 Playback controls automatically appear after classification
+
+### v1.1.0
 - ✨ **NEW**: Audio file upload functionality
 - ✨ **NEW**: WAV file parser (16-bit PCM support)
 - ✨ **NEW**: File validation (format & size)

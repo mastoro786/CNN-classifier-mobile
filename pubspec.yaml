@@ -34,8 +34,15 @@ dependencies:
   # Utilities
   intl: ^0.18.0
   shared_preferences: ^2.2.0
+  
+  # Database
+  sqflite: ^2.3.0
+  path: ^1.8.0
+  
+  # Excel Export
+  excel: ^4.0.0
 
-  #Logging & Error Handling
+  # Logging & Error Handling
   logger: ^2.0.0
 
 dev_dependencies:

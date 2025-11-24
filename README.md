@@ -12,6 +12,13 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 ✅ **Real-time Audio Recording** - 5-second samples  
 ✅ **Audio File Upload** - Support WAV format (16-bit PCM)  
 ✅ **Audio Playback** - Play recorded or uploaded audio  
+✅ **Silence Detection** - Auto-detect empty or silent audio  
+✅ **History Management** - Save and view all analysis results  
+✅ **Database Storage** - SQLite for persistent data  
+✅ **Export to Excel** - Convert history to spreadsheet (.xlsx)  
+✅ **Patient Records** - Track analysis by patient name  
+✅ **Search & Filter** - Find specific analysis records  
+✅ **Statistics Dashboard** - Overview of all analyses  
 ✅ **Mel Spectrogram Analysis** - Advanced audio feature extraction  
 ✅ **TensorFlow Lite Inference** - Optimized CNN model  
 ✅ **Beautiful UI** - Modern Material 3 design with loading animations  
@@ -83,19 +90,23 @@ flutter build apk --release
 ```
 lib/
 ├── main.dart                    # Entry point
+├── models/
+│   └── analysis_history.dart    # Database model for history
 ├── screens/
-│   └── classifier_screen.dart   # Main classification screen
+│   ├── classifier_screen.dart   # Main classification screen
+│   └── history_screen.dart      # History & statistics screen
 ├── widgets/
 │   ├── gradient_header.dart     # App branding header
 │   ├── recording_button.dart    # Recording button with animation
-│   ├── upload_button.dart       # Upload file button
-│   └── result_card.dart         # Results display card
+│   └── upload_button.dart       # Upload file button
 ├── services/
 │   ├── audio_processor.dart     # Mel Spectrogram extraction
 │   ├── classifier_service.dart  # TFLite inference
 │   ├── audio_recording_service.dart  # Audio recording
 │   ├── audio_file_service.dart  # Audio file loading & parsing
-│   └── audio_playback_service.dart  # Audio playback controls
+│   ├── audio_playback_service.dart  # Audio playback controls
+│   ├── database_helper.dart     # SQLite database operations
+│   └── mel_filterbank.dart      # Librosa-compatible Mel filterbank
 └── providers/
     └── audio_provider.dart      # State management
 
@@ -297,7 +308,21 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ## 🆕 Recent Updates
 
-### v1.4.0 (Latest) - UX Enhancement
+### v1.5.0 (Latest) - History & Database Management
+- ✨ **NEW**: SQLite database for storing analysis history
+- ✨ **NEW**: History screen with search functionality
+- ✨ **NEW**: Export history to Excel (.xlsx) spreadsheet
+- ✨ **NEW**: Save analysis results with patient name
+- 📊 Statistics dashboard (Total, Normal, Skizofrenia counts)
+- 🗑️ Delete individual history records
+- 🔍 Search by patient name or result type
+- 📁 Data persists across app restarts
+- 🐛 **CRITICAL FIX**: Silent audio detection now runs BEFORE loading spinner
+- 🐛 **CRITICAL FIX**: Result card removed (only popup dialog shown)
+- 🐛 Fixed spinner appearing after "No Voice Detected" alert
+- 📦 New dependencies: sqflite, excel, path
+
+### v1.4.0 - UX Enhancement
 - ✨ **NEW**: Silence detection before classification
 - ✨ **NEW**: Beautiful result popup dialog with color-coded results
 - 🔇 Auto-detect silent/empty audio (RMS energy threshold)

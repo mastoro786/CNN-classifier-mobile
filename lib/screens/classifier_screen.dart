@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 import '../services/classifier_service.dart';
 import '../providers/audio_provider.dart';
 import '../widgets/gradient_header.dart';
-import '../widgets/result_card.dart';
 import '../widgets/recording_button.dart';
 import '../widgets/upload_button.dart';
+import '../services/database_helper.dart';
+import '../models/analysis_history.dart';
+import 'history_screen.dart';
 
 class ClassifierScreen extends StatefulWidget {
   const ClassifierScreen({super.key});
@@ -69,6 +71,20 @@ class _ClassifierScreenState extends State<ClassifierScreen>
             ),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const HistoryScreen(),
+                ),
+              );
+            },
+            tooltip: 'History Analisis',
+          ),
+        ],
       ),
       body: _isLoading
           ? Center(
@@ -178,14 +194,12 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                             
                             const SizedBox(height: 24),
                             
-                            // Results
-                            if (audioProvider.result != null) ...[
-                              ResultCard(result: audioProvider.result!),
-                              const SizedBox(height: 16),
-                              // Playback controls
-                              if (audioProvider.lastAudioFilePath != null)
-                                _buildPlaybackCard(audioProvider),
-                            ],
+                            // Playback controls (only show if result exists)
+                            if (audioProvider.result != null && 
+                                audioProvider.lastAudioFilePath != null)
+                              _buildPlaybackCard(audioProvider),
+                            
+                            // Error card
                             if (audioProvider.error != null)
                               _buildErrorCard(audioProvider.error!),
                           ],
@@ -325,69 +339,7 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         return;
       }
 
-      // Show processing
-      audioProvider.setProcessing(true);
-
-      if (!mounted) return;
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 60,
-                        height: 60,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 6,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Theme.of(context).primaryColor,
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.graphic_eq,
-                        color: Theme.of(context).primaryColor,
-                        size: 30,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Analyzing audio...',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Processing AI model',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Check for silence
+      // Check for silence FIRST before showing loading
       if (_classifier.isSilence(audioData)) {
         if (mounted) {
           showDialog(
@@ -418,6 +370,71 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         }
         return;
       }
+
+      // Show processing after silence check passes
+      audioProvider.setProcessing(true);
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 6,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.graphic_eq,
+                          color: Theme.of(context).primaryColor,
+                          size: 30,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Analyzing audio...',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Processing with CNN Model',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 
       // Run classification
       try {
@@ -602,169 +619,226 @@ class _ClassifierScreenState extends State<ClassifierScreen>
     }
   }
 
-  /// Show result dialog popup
-  void _showResultDialog(ClassificationResult result) {
+  /// Show result dialog popup with name input and save option
+  void _showResultDialog(ClassificationResult result) async {
     final bool isNormal = result.predictedIndex == 0;
     final Color primaryColor = isNormal ? Colors.green : Colors.red;
     final IconData icon = isNormal ? Icons.check_circle : Icons.warning;
     final String title = result.predictedLabel;
     final double confidence = result.confidence * 100;
+    final TextEditingController nameController = TextEditingController();
     
-    showDialog(
+    final shouldSave = await showDialog<bool>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              colors: [
-                primaryColor.withOpacity(0.1),
-                Colors.white,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [
+                  primaryColor.withOpacity(0.1),
+                  Colors.white,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon with animation
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 60,
-                  color: primaryColor,
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Title
-              Text(
-                'Hasil Klasifikasi',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              
-              // Result label
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: primaryColor,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              
-              // Confidence
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: primaryColor.withOpacity(0.3),
-                    width: 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon with animation
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 60,
+                    color: primaryColor,
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.analytics,
-                      color: primaryColor,
-                      size: 20,
+                const SizedBox(height: 24),
+                
+                // Title
+                Text(
+                  'Hasil Klasifikasi',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                // Result label
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                
+                // Confidence
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: primaryColor.withOpacity(0.3),
+                      width: 1,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Confidence: ${confidence.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.analytics,
                         color: primaryColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Confidence: ${confidence.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Probability bars
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildProbabilityRow(
+                        'Normal',
+                        result.probabilitiesList[0],
+                        Colors.green,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildProbabilityRow(
+                        'Skizofrenia',
+                        result.probabilitiesList[1],
+                        Colors.red,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Processing time
+                Text(
+                  'Waktu proses: ${result.inferenceTime}ms',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Name input field
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Nama Pasien (opsional)',
+                    hintText: 'Masukkan nama pasien',
+                    prefixIcon: const Icon(Icons.person),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        child: const Text(
+                          'Tutup',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: const Text(
+                          'Simpan',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              
-              // Probability bars
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    _buildProbabilityRow(
-                      'Normal',
-                      result.probabilitiesList[0],
-                      Colors.green,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildProbabilityRow(
-                      'Skizofrenia',
-                      result.probabilitiesList[1],
-                      Colors.red,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Processing time
-              Text(
-                'Waktu proses: ${result.inferenceTime}ms',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 20),
-              
-              // Close button
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
-                child: const Text(
-                  'Tutup',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+    
+    // Save to database if user clicked "Simpan"
+    if (shouldSave == true && mounted) {
+      await _saveToHistory(
+        patientName: nameController.text.trim().isEmpty 
+            ? 'Unknown' 
+            : nameController.text.trim(),
+        result: result,
+      );
+    }
   }
   
   /// Build probability bar row
@@ -807,6 +881,52 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         ),
       ],
     );
+  }
+
+  /// Save analysis result to history database
+  Future<void> _saveToHistory({
+    required String patientName,
+    required ClassificationResult result,
+  }) async {
+    try {
+      final audioProvider = Provider.of<AudioProvider>(context, listen: false);
+      
+      final history = AnalysisHistory(
+        patientName: patientName,
+        analysisDate: DateTime.now(),
+        result: result.predictedLabel,
+        confidence: result.confidence,
+        inferenceTime: result.inferenceTime,
+        audioFilePath: audioProvider.lastAudioFilePath,
+      );
+
+      await DatabaseHelper.instance.insert(history);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('Hasil analisis disimpan: $patientName'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override

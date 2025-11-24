@@ -11,7 +11,7 @@ class ClassifierService {
   bool get isLoaded => _interpreter != null;
   
   /// Check if audio is silence (no voice detected)
-  bool isSilence(Float32List samples, {double threshold = 0.01}) {
+  bool isSilence(Float32List samples, {double threshold = 0.0001}) {
     if (samples.isEmpty) return true;
     
     // Calculate RMS (Root Mean Square) energy
@@ -22,7 +22,10 @@ class ClassifierService {
     double rms = sumSquares / samples.length;
     double energy = rms;
     
-    print('🔊 Audio energy: ${energy.toStringAsFixed(6)} (threshold: $threshold)');
+    print('🔊 Audio energy: ${energy.toStringAsFixed(8)} (threshold: $threshold)');
+    print('   Samples count: ${samples.length}');
+    print('   First 10 samples: ${samples.take(10).toList()}');
+    print('   Is silence: ${energy < threshold}');
     
     return energy < threshold;
   }

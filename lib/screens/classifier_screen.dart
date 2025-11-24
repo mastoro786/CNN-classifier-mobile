@@ -339,39 +339,11 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         return;
       }
 
-      // Check for silence FIRST before showing loading
-      if (_classifier.isSilence(audioData)) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Row(
-                children: [
-                  Icon(Icons.volume_off, color: Colors.orange.shade700),
-                  const SizedBox(width: 12),
-                  const Text('No Voice Detected'),
-                ],
-              ),
-              content: const Text(
-                'File audio yang dipilih tidak mengandung suara. Silakan pilih file audio yang berbeda.',
-                style: TextStyle(fontSize: 14),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-
-      // Show processing after silence check passes
+      // TEMPORARY: Silence check disabled for debugging
+      // Will log audio energy to console for threshold tuning
+      _classifier.isSilence(audioData); // Just log, don't block
+      
+      // Show processing
       audioProvider.setProcessing(true);
 
       if (!mounted) return;
@@ -494,38 +466,10 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         return;
       }
 
-      // Check for silence
-      if (_classifier.isSilence(audioData)) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Row(
-                children: [
-                  Icon(Icons.volume_off, color: Colors.orange.shade700),
-                  const SizedBox(width: 12),
-                  const Text('No Voice Detected'),
-                ],
-              ),
-              content: const Text(
-                'Tidak terdeteksi suara pada rekaman audio. Silakan coba lagi dengan berbicara lebih jelas atau di tempat yang lebih tenang.',
-                style: TextStyle(fontSize: 14),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-
+      // TEMPORARY: Silence check disabled for debugging
+      // Will log audio energy to console for threshold tuning
+      _classifier.isSilence(audioData); // Just log, don't block
+      
       // Show processing
       audioProvider.setProcessing(true);
 
@@ -621,11 +565,20 @@ class _ClassifierScreenState extends State<ClassifierScreen>
 
   /// Show result dialog popup with name input and save option
   void _showResultDialog(ClassificationResult result) async {
+    print('🎯 Result Dialog Debug:');
+    print('   Predicted Label: ${result.predictedLabel}');
+    print('   Predicted Index: ${result.predictedIndex}');
+    print('   Probabilities: ${result.probabilitiesList}');
+    print('   Confidence: ${result.confidence}');
+    
     final bool isNormal = result.predictedIndex == 0;
     final Color primaryColor = isNormal ? Colors.green : Colors.red;
     final IconData icon = isNormal ? Icons.check_circle : Icons.warning;
     final String title = result.predictedLabel;
     final double confidence = result.confidence * 100;
+    
+    print('   isNormal: $isNormal');
+    print('   primaryColor: ${primaryColor == Colors.green ? "Green" : "Red"}');
     final TextEditingController nameController = TextEditingController();
     
     final shouldSave = await showDialog<bool>(
@@ -732,16 +685,27 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                   ),
                   child: Column(
                     children: [
-                      _buildProbabilityRow(
-                        'Normal',
-                        result.probabilitiesList[0],
-                        Colors.green,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildProbabilityRow(
-                        'Skizofrenia',
-                        result.probabilitiesList[1],
-                        Colors.red,
+                      Builder(
+                        builder: (context) {
+                          print('🎨 Probability Bar Debug:');
+                          print('   Normal: ${result.probabilitiesList[0]}');
+                          print('   Skizofrenia: ${result.probabilitiesList[1]}');
+                          return Column(
+                            children: [
+                              _buildProbabilityRow(
+                                'Normal',
+                                result.probabilitiesList[0],
+                                Colors.green,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildProbabilityRow(
+                                'Skizofrenia',
+                                result.probabilitiesList[1],
+                                Colors.red,
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),

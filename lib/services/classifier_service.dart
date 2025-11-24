@@ -10,6 +10,23 @@ class ClassifierService {
   
   bool get isLoaded => _interpreter != null;
   
+  /// Check if audio is silence (no voice detected)
+  bool isSilence(Float32List samples, {double threshold = 0.01}) {
+    if (samples.isEmpty) return true;
+    
+    // Calculate RMS (Root Mean Square) energy
+    double sumSquares = 0.0;
+    for (var sample in samples) {
+      sumSquares += sample * sample;
+    }
+    double rms = sumSquares / samples.length;
+    double energy = rms;
+    
+    print('🔊 Audio energy: ${energy.toStringAsFixed(6)} (threshold: $threshold)');
+    
+    return energy < threshold;
+  }
+  
   /// Load TFLite model
   Future<void> loadModel() async {
     try {
@@ -119,6 +136,14 @@ class ClassificationResult {
     required this.probabilities,
     required this.inferenceTime,
   });
+  
+  // Helper getters for easier access
+  String get predictedLabel => predictedClass;
+  int get predictedIndex => predictedClass == 'Normal' ? 0 : 1;
+  List<double> get probabilitiesList => [
+    probabilities['Normal'] ?? 0.0,
+    probabilities['Skizofrenia'] ?? 0.0,
+  ];
   
   bool get isNormal => predictedClass.toLowerCase() == 'normal';
   bool get isHighConfidence => confidence >= 0.8;

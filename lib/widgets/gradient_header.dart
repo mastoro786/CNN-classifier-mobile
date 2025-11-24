@@ -85,11 +85,11 @@ class GradientHeader extends StatelessWidget {
           
           // Description
           Text(
-            'Offline AI-Powered Audio Classification',
+            'Analisis Audio Berbasis CNN',
             style: TextStyle(
               fontSize: 12,
               color: Colors.white.withOpacity(0.9),
-              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
           ),

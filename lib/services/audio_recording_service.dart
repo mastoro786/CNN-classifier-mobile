@@ -100,6 +100,24 @@ class AudioRecordingService {
     return await _recorder.isRecording();
   }
   
+  /// Check if audio is silence (no voice detected)
+  /// Returns true if audio RMS energy is below threshold
+  bool isSilence(Float32List samples, {double threshold = 0.01}) {
+    if (samples.isEmpty) return true;
+    
+    // Calculate RMS (Root Mean Square) energy
+    double sumSquares = 0.0;
+    for (var sample in samples) {
+      sumSquares += sample * sample;
+    }
+    double rms = sumSquares / samples.length;
+    double energy = rms;
+    
+    print('🔊 Audio energy: ${energy.toStringAsFixed(6)} (threshold: $threshold)');
+    
+    return energy < threshold;
+  }
+  
   /// Convert WAV bytes to Float32List
   Float32List _wavBytesToFloat32(Uint8List bytes) {
     // Skip WAV header (44 bytes)

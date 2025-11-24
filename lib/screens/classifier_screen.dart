@@ -387,17 +387,59 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         ),
       );
 
+      // Check for silence
+      if (_classifier.isSilence(audioData)) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.volume_off, color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  const Text('No Voice Detected'),
+                ],
+              ),
+              content: const Text(
+                'File audio yang dipilih tidak mengandung suara. Silakan pilih file audio yang berbeda.',
+                style: TextStyle(fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
       // Run classification
       try {
         final result = await _classifier.classify(audioData);
         audioProvider.setResult(result);
+        
+        // Close loading dialog
+        if (mounted) {
+          Navigator.pop(context);
+        }
+        
+        // Show result popup
+        if (mounted) {
+          _showResultDialog(result);
+        }
       } catch (e) {
         audioProvider.setError('Classification error: $e');
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } finally {
         audioProvider.setProcessing(false);
-        if (mounted) {
-          Navigator.pop(context); // Close processing dialog
-        }
       }
     } catch (e) {
       audioProvider.setError('File upload error: $e');
@@ -435,6 +477,38 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         return;
       }
 
+      // Check for silence
+      if (_classifier.isSilence(audioData)) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.volume_off, color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  const Text('No Voice Detected'),
+                ],
+              ),
+              content: const Text(
+                'Tidak terdeteksi suara pada rekaman audio. Silakan coba lagi dengan berbicara lebih jelas atau di tempat yang lebih tenang.',
+                style: TextStyle(fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
       // Show processing
       audioProvider.setProcessing(true);
 
@@ -443,54 +517,57 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => Center(
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 60,
-                        height: 60,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 6,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Theme.of(context).primaryColor,
+        builder: (context) => WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 6,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
                           ),
                         ),
-                      ),
-                      Icon(
-                        Icons.graphic_eq,
-                        color: Theme.of(context).primaryColor,
-                        size: 30,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Analyzing audio...',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                        Icon(
+                          Icons.graphic_eq,
+                          color: Theme.of(context).primaryColor,
+                          size: 30,
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Processing AI model',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Analyzing audio...',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'Processing with CNN Model',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -501,18 +578,235 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       try {
         final result = await _classifier.classify(audioData);
         audioProvider.setResult(result);
+        
+        // Close loading dialog
+        if (mounted) {
+          Navigator.pop(context);
+        }
+        
+        // Show result popup
+        if (mounted) {
+          _showResultDialog(result);
+        }
       } catch (e) {
         audioProvider.setError('Classification error: $e');
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } finally {
         audioProvider.setProcessing(false);
-        if (mounted) {
-          Navigator.pop(context); // Close processing dialog
-        }
       }
     } catch (e) {
       audioProvider.setError('Recording error: $e');
       audioProvider.setProcessing(false);
     }
+  }
+
+  /// Show result dialog popup
+  void _showResultDialog(ClassificationResult result) {
+    final bool isNormal = result.predictedIndex == 0;
+    final Color primaryColor = isNormal ? Colors.green : Colors.red;
+    final IconData icon = isNormal ? Icons.check_circle : Icons.warning;
+    final String title = result.predictedLabel;
+    final double confidence = result.confidence * 100;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              colors: [
+                primaryColor.withOpacity(0.1),
+                Colors.white,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon with animation
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 60,
+                  color: primaryColor,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Title
+              Text(
+                'Hasil Klasifikasi',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // Result label
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: primaryColor,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              
+              // Confidence
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: primaryColor.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.analytics,
+                      color: primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Confidence: ${confidence.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Probability bars
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    _buildProbabilityRow(
+                      'Normal',
+                      result.probabilitiesList[0],
+                      Colors.green,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildProbabilityRow(
+                      'Skizofrenia',
+                      result.probabilitiesList[1],
+                      Colors.red,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Processing time
+              Text(
+                'Waktu proses: ${result.inferenceTime}ms',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Close button
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
+                ),
+                child: const Text(
+                  'Tutup',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  /// Build probability bar row
+  Widget _buildProbabilityRow(String label, double probability, Color color) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: probability,
+              backgroundColor: Colors.grey.shade300,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 12,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 50,
+          child: Text(
+            '${(probability * 100).toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
+    );
   }
 
   @override

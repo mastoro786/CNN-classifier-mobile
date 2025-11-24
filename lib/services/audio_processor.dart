@@ -1,9 +1,14 @@
 import 'dart:typed_data';
 import 'dart:math';
 import 'package:fftea/fftea.dart';
+import 'mel_filterbank.dart';
 
-/// Audio Processor for extracting Mel Spectrogram features
-/// This implementation matches the Python preprocessing pipeline
+/// FIXED Audio Processor - Matches Python Preprocessing
+/// 
+/// This version fixes the bias issue by:
+/// 1. Using proper Mel filterbank (librosa-compatible)
+/// 2. Removing incorrect normalization
+/// 3. Using correct dB conversion with max reference
 class AudioProcessor {
   // Configuration matching Python preprocessing
   static const int sampleRate = 22050;
@@ -13,12 +18,14 @@ class AudioProcessor {
   static const int hopLength = 512;
   static const int fMax = 8000;
   
-  /// Extract Mel Spectrogram from audio samples
-  /// This should match the preprocessing done in Python
+  // Cache Mel filterbank (compute once)
+  static List<List<double>>? _cachedMelFilters;
+  
+  /// Extract Mel Spectrogram - FIXED VERSION
   static Future<List<List<double>>> extractMelSpectrogram(
     Float32List audioSamples,
   ) async {
-    print('📊 Extracting Mel Spectrogram...');
+    print('📊 Extracting Mel Spectrogram (FIXED)...');
     print('   Sample rate: $sampleRate Hz');
     print('   Audio length: ${audioSamples.length} samples');
     
@@ -26,19 +33,33 @@ class AudioProcessor {
     List<List<double>> stft = await _computeSTFT(audioSamples);
     print('   STFT shape: ${stft.length} x ${stft[0].length}');
     
-    // 2. Convert to Mel scale
-    List<List<double>> melSpec = _applyMelFilterbank(stft);
+    // 2. Create Mel filterbank (cache it!)
+    _cachedMelFilters ??= MelFilterbank.createMelFilterbank(
+      nfft: fftSize,
+      nMels: nMels,
+      sampleRate: sampleRate,
+      fMin: 0.0,
+      fMax: fMax.toDouble(),
+    );
+    print('   Mel filters: ${_cachedMelFilters!.length} bands');
+    
+    // 3. Apply Mel filterbank
+    List<List<double>> melSpec = MelFilterbank.applyFilterbank(
+      stft,
+      _cachedMelFilters!,
+    );
     print('   Mel spec shape: ${melSpec.length} x ${melSpec[0].length}');
     
-    // 3. Convert to dB scale
-    List<List<double>> melSpecDB = _powerToDb(melSpec);
+    // 4. Convert to dB scale (librosa-style: ref=max)
+    List<List<double>> melSpecDB = _powerToDbLibrosa(melSpec);
     
-    // 4. Normalize to [0, 1]
-    List<List<double>> normalized = _normalize(melSpecDB);
-    
-    // 5. Pad or truncate to fixed length
-    List<List<double>> fixed = _fixLength(normalized, maxLen);
+    // 5. NO NORMALIZATION! (Python doesn't normalize to [0,1])
+    // Direct pad/truncate
+    List<List<double>> fixed = _fixLength(melSpecDB, maxLen);
     print('   Final shape: ${fixed.length} x ${fixed[0].length}');
+    
+    // Debug: Print value range
+    _printValueStats(fixed);
     
     return fixed;
   }
@@ -65,104 +86,50 @@ class AudioProcessor {
       // Compute FFT using fftea
       final Float64x2List fftResult = fftInstance.realFft(frame);
       
-      // Compute magnitude
-      List<double> magnitude = [];
+      // Compute power (magnitude squared)
+      List<double> power = [];
       for (int k = 0; k < fftSize ~/ 2; k++) {
         double real = fftResult[k].x;
         double imag = fftResult[k].y;
-        magnitude.add(sqrt(real * real + imag * imag));
+        // Power spectrum (not just magnitude)
+        power.add(real * real + imag * imag);
       }
       
-      stft.add(magnitude);
+      stft.add(power);
     }
     
     return stft;
   }
   
-  /// Apply Mel filterbank (simplified version)
-  static List<List<double>> _applyMelFilterbank(List<List<double>> stft) {
-    // This is a simplified version
-    // For production, use a proper Mel filterbank implementation
-    // or port from librosa
-    
-    List<List<double>> melSpec = [];
-    
-    final melBands = _createMelFilterbank(stft[0].length, nMels);
-    
-    for (var frame in stft) {
-      List<double> melFrame = [];
-      for (var melFilter in melBands) {
-        double melValue = 0.0;
-        for (int i = 0; i < frame.length && i < melFilter.length; i++) {
-          melValue += frame[i] * melFilter[i];
-        }
-        melFrame.add(melValue);
+  /// Convert power to dB - Librosa style (ref=np.max)
+  /// 
+  /// Formula: 10 * log10(S / ref)
+  /// where ref = max(S) to match librosa.power_to_db(ref=np.max)
+  static List<List<double>> _powerToDbLibrosa(List<List<double>> spec) {
+    // Find maximum value in entire spectrogram
+    double maxPower = double.negativeInfinity;
+    for (var frame in spec) {
+      for (var value in frame) {
+        if (value > maxPower) maxPower = value;
       }
-      melSpec.add(melFrame);
     }
     
-    return melSpec;
-  }
-  
-  /// Create Mel filterbank (simplified)
-  static List<List<double>> _createMelFilterbank(int nfft, int nMels) {
-    // Simplified mel filterbank
-    // For production, implement proper mel scale conversion
-    List<List<double>> filterbank = [];
+    // Use max as reference (matching Python)
+    double refPower = max(maxPower, 1e-10);  // Avoid log(0)
     
-    for (int i = 0; i < nMels; i++) {
-      List<double> filter = List.filled(nfft, 0.0);
-      
-      // Simple triangular filters
-      int center = (i * nfft / nMels).round();
-      int width = (nfft / nMels).round();
-      
-      for (int j = max(0, center - width); 
-           j < min(nfft, center + width); j++) {
-        filter[j] = 1.0 - (j - center).abs() / width;
-      }
-      
-      filterbank.add(filter);
-    }
+    print('   Power range: max=$maxPower, ref=$refPower');
     
-    return filterbank;
-  }
-  
-  /// Convert power to dB
-  static List<List<double>> _powerToDb(List<List<double>> spec) {
     List<List<double>> dbSpec = [];
-    
     for (var frame in spec) {
       List<double> dbFrame = frame.map((value) {
-        return 10 * log(max(value, 1e-10)) / ln10;
+        // librosa formula: 10 * log10(S / ref)
+        double db = 10.0 * log(max(value, 1e-10) / refPower) / ln10;
+        return db;
       }).toList();
       dbSpec.add(dbFrame);
     }
     
     return dbSpec;
-  }
-  
-  /// Normalize to [0, 1]
-  static List<List<double>> _normalize(List<List<double>> spec) {
-    double minVal = double.infinity;
-    double maxVal = double.negativeInfinity;
-    
-    for (var frame in spec) {
-      for (var value in frame) {
-        if (value < minVal) minVal = value;
-        if (value > maxVal) maxVal = value;
-      }
-    }
-    
-    List<List<double>> normalized = [];
-    for (var frame in spec) {
-      List<double> normFrame = frame.map((value) {
-        return (value - minVal) / (maxVal - minVal);
-      }).toList();
-      normalized.add(normFrame);
-    }
-    
-    return normalized;
   }
   
   /// Pad or truncate to fixed length
@@ -202,10 +169,46 @@ class AudioProcessor {
     }
     
     // Add batch and channel dimensions
-    return [
+    var input = [
       transposed.map((row) => 
         row.map((val) => [val]).toList()
       ).toList()
     ];
+    
+    print('   Model input shape: (${input.length}, ${input[0].length}, ${input[0][0].length}, ${input[0][0][0].length})');
+    
+    return input;
+  }
+  
+  /// Debug: Print value statistics
+  static void _printValueStats(List<List<double>> spec) {
+    double minVal = double.infinity;
+    double maxVal = double.negativeInfinity;
+    double sum = 0;
+    int count = 0;
+    
+    for (var frame in spec) {
+      for (var value in frame) {
+        if (value < minVal) minVal = value;
+        if (value > maxVal) maxVal = value;
+        sum += value;
+        count++;
+      }
+    }
+    
+    double mean = sum / count;
+    
+    print('   Value stats:');
+    print('     Min: ${minVal.toStringAsFixed(2)} dB');
+    print('     Max: ${maxVal.toStringAsFixed(2)} dB');
+    print('     Mean: ${mean.toStringAsFixed(2)} dB');
+    print('     Expected range: [-80, 0] dB');
+    
+    // Validation
+    if (maxVal > 5 || minVal > 0) {
+      print('   ⚠️  WARNING: Values outside expected dB range!');
+    } else {
+      print('   ✅ Values in expected dB range');
+    }
   }
 }

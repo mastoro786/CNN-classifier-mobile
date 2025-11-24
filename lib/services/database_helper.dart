@@ -123,8 +123,8 @@ class DatabaseHelper {
       };
     }
 
-    final normalCount = allHistory.where((h) => h.result == 'Normal').length;
-    final skizofreniaCount = allHistory.where((h) => h.result == 'Skizofrenia').length;
+    final normalCount = allHistory.where((h) => h.result.toLowerCase() == 'normal').length;
+    final skizofreniaCount = allHistory.where((h) => h.result.toLowerCase() == 'skizofrenia').length;
     final avgConfidence = allHistory.fold<double>(
       0.0, 
       (sum, h) => sum + h.confidence,

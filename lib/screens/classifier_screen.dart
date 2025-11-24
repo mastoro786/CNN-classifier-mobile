@@ -408,6 +408,9 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         ),
       );
 
+      // Wait for dialog to render
+      await Future.delayed(const Duration(milliseconds: 100));
+
       // Run classification
       try {
         final result = await _classifier.classify(audioData);
@@ -464,6 +467,36 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       if (audioData == null) {
         audioProvider.setError('Failed to record audio');
         return;
+      }
+
+      // Validate recording duration
+      final durationSeconds = audioData.length / 22050;
+      print('⏱️ Recording duration: ${durationSeconds.toStringAsFixed(2)}s');
+      
+      if (durationSeconds < 1.0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Recording too short! Please record at least 1 second of audio.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        audioProvider.setError('Recording too short');
+        return;
+      }
+      
+      if (durationSeconds > 10.0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Recording too long! Please keep it under 10 seconds for best results.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
 
       // TEMPORARY: Silence check disabled for debugging
@@ -534,6 +567,9 @@ class _ClassifierScreenState extends State<ClassifierScreen>
           ),
         ),
       );
+
+      // Wait for dialog to render
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Run classification
       try {
@@ -723,18 +759,32 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                 ),
                 const SizedBox(height: 20),
                 
-                // Name input field
+                // Name input field (REQUIRED)
                 TextField(
                   controller: nameController,
                   decoration: InputDecoration(
-                    labelText: 'Nama Pasien (opsional)',
-                    hintText: 'Masukkan nama pasien',
+                    labelText: 'Nama Pasien *',
+                    hintText: 'Wajib diisi',
                     prefixIcon: const Icon(Icons.person),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
                     fillColor: Colors.white,
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  autofocus: false,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '* Wajib diisi untuk menyimpan hasil analisis',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -765,6 +815,27 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          // Validate name is not empty
+                          final name = nameController.text.trim();
+                          if (name.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Row(
+                                  children: [
+                                    Icon(Icons.error_outline, color: Colors.white),
+                                    SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text('Nama pasien wajib diisi!'),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: Colors.red,
+                                duration: const Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
                           Navigator.pop(context, true);
                         },
                         style: ElevatedButton.styleFrom(
@@ -794,14 +865,16 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       ),
     );
     
-    // Save to database if user clicked "Simpan"
+    // Save to database if user clicked "Simpan" and name is provided
     if (shouldSave == true && mounted) {
-      await _saveToHistory(
-        patientName: nameController.text.trim().isEmpty 
-            ? 'Unknown' 
-            : nameController.text.trim(),
-        result: result,
-      );
+      final name = nameController.text.trim();
+      // Name validation already done in dialog, but double-check
+      if (name.isNotEmpty) {
+        await _saveToHistory(
+          patientName: name,
+          result: result,
+        );
+      }
     }
   }
   
@@ -989,7 +1062,31 @@ class _RecordingDialogState extends State<_RecordingDialog>
                 color: Colors.grey.shade600,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Speak naturally and clearly in a quiet environment',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             LinearProgressIndicator(
               value: (_remainingSeconds / widget.duration),
               backgroundColor: Colors.grey.shade200,

@@ -347,7 +347,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildHistoryCard(AnalysisHistory history) {
-    final bool isNormal = history.result == 'Normal';
+    final bool isNormal = history.result.toLowerCase() == 'normal';
     final Color resultColor = isNormal ? Colors.green : Colors.red;
 
     return Card(
@@ -372,7 +372,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      isNormal ? Icons.check_circle : Icons.warning,
+                      isNormal ? Icons.check_circle_outline : Icons.error_outline,
                       color: resultColor,
                       size: 24,
                     ),
@@ -465,7 +465,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _showDetailDialog(AnalysisHistory history) {
-    final bool isNormal = history.result == 'Normal';
+    final bool isNormal = history.result.toLowerCase() == 'normal';
     final Color resultColor = isNormal ? Colors.green : Colors.red;
 
     showDialog(
@@ -475,7 +475,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: Row(
           children: [
             Icon(
-              isNormal ? Icons.check_circle : Icons.warning,
+              isNormal ? Icons.check_circle_outline : Icons.error_outline,
               color: resultColor,
             ),
             const SizedBox(width: 12),

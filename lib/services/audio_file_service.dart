@@ -105,7 +105,10 @@ class AudioFileService {
         throw const FormatException('Invalid WAV file: missing WAVE format');
       }
       
-      // Find data chunk
+      // Parse fmt chunk to get audio format info
+      int numChannels = 1;
+      int sampleRate = 22050;
+      int bitsPerSample = 16;
       int dataOffset = 12;
       int dataSize = 0;
       
@@ -113,7 +116,15 @@ class AudioFileService {
         final chunkId = String.fromCharCodes(bytes.sublist(dataOffset, dataOffset + 4));
         final chunkSize = _readInt32(bytes, dataOffset + 4);
         
-        if (chunkId == 'data') {
+        if (chunkId == 'fmt ') {
+          // Read audio format parameters
+          // audioFormat = bytes[dataOffset + 8] | (bytes[dataOffset + 9] << 8); // 1 = PCM
+          numChannels = bytes[dataOffset + 10] | (bytes[dataOffset + 11] << 8);
+          sampleRate = _readInt32(bytes, dataOffset + 12);
+          bitsPerSample = bytes[dataOffset + 22] | (bytes[dataOffset + 23] << 8);
+          
+          print('   WAV fmt: $numChannels channels, $sampleRate Hz, $bitsPerSample bits');
+        } else if (chunkId == 'data') {
           dataSize = chunkSize;
           dataOffset += 8;
           break;
@@ -131,24 +142,57 @@ class AudioFileService {
       // Extract PCM data
       final pcmData = bytes.sublist(dataOffset, dataOffset + dataSize);
       
-      // Assume 16-bit PCM (2 bytes per sample)
-      final numSamples = pcmData.length ~/ 2;
-      final Float32List samples = Float32List(numSamples);
+      // Calculate number of samples per channel
+      final bytesPerSample = bitsPerSample ~/ 8;
+      final totalSamples = pcmData.length ~/ bytesPerSample;
+      final samplesPerChannel = totalSamples ~/ numChannels;
       
-      for (int i = 0; i < numSamples; i++) {
-        // Read 16-bit signed integer (little-endian)
-        final byte1 = pcmData[i * 2];
-        final byte2 = pcmData[i * 2 + 1];
-        final int16Value = (byte2 << 8) | byte1;
-        
-        // Convert to signed
-        final signedValue = int16Value > 32767 ? int16Value - 65536 : int16Value;
-        
-        // Normalize to [-1.0, 1.0]
-        samples[i] = signedValue / 32768.0;
+      // Read and convert to float, handling stereo by averaging channels
+      final Float32List monoSamples = Float32List(samplesPerChannel);
+      
+      if (numChannels == 1) {
+        // Mono: direct conversion
+        for (int i = 0; i < samplesPerChannel; i++) {
+          final byte1 = pcmData[i * 2];
+          final byte2 = pcmData[i * 2 + 1];
+          final int16Value = (byte2 << 8) | byte1;
+          final signedValue = int16Value > 32767 ? int16Value - 65536 : int16Value;
+          monoSamples[i] = signedValue / 32768.0;
+        }
+      } else if (numChannels == 2) {
+        // Stereo: average left and right channels (matching librosa mono=True)
+        for (int i = 0; i < samplesPerChannel; i++) {
+          // Read left channel
+          final leftByte1 = pcmData[i * 4];
+          final leftByte2 = pcmData[i * 4 + 1];
+          final leftInt16 = (leftByte2 << 8) | leftByte1;
+          final leftSigned = leftInt16 > 32767 ? leftInt16 - 65536 : leftInt16;
+          final leftFloat = leftSigned / 32768.0;
+          
+          // Read right channel
+          final rightByte1 = pcmData[i * 4 + 2];
+          final rightByte2 = pcmData[i * 4 + 3];
+          final rightInt16 = (rightByte2 << 8) | rightByte1;
+          final rightSigned = rightInt16 > 32767 ? rightInt16 - 65536 : rightInt16;
+          final rightFloat = rightSigned / 32768.0;
+          
+          // Average channels
+          monoSamples[i] = (leftFloat + rightFloat) / 2.0;
+        }
+      } else {
+        throw UnsupportedError('Only mono and stereo audio supported, got $numChannels channels');
       }
       
-      return samples;
+      // Resample to 22050 Hz if needed (matching librosa sr=22050)
+      final Float32List resampledSamples;
+      if (sampleRate == 22050) {
+        resampledSamples = monoSamples;
+      } else {
+        resampledSamples = _resample(monoSamples, sampleRate, 22050);
+        print('   Resampled from $sampleRate Hz to 22050 Hz');
+      }
+      
+      return resampledSamples;
     } catch (e) {
       print('❌ Error parsing WAV file: $e');
       rethrow;
@@ -161,6 +205,33 @@ class AudioFileService {
            (bytes[offset + 1] << 8) |
            (bytes[offset + 2] << 16) |
            (bytes[offset + 3] << 24);
+  }
+  
+  /// Resample audio to target sample rate using linear interpolation
+  /// This matches librosa.resample() basic behavior for sr=22050
+  Float32List _resample(Float32List input, int fromRate, int toRate) {
+    if (fromRate == toRate) return input;
+    
+    final double ratio = toRate / fromRate;
+    final int outputLength = (input.length * ratio).round();
+    final Float32List output = Float32List(outputLength);
+    
+    for (int i = 0; i < outputLength; i++) {
+      // Calculate position in input array
+      final double position = i / ratio;
+      final int index = position.floor();
+      final double fraction = position - index;
+      
+      if (index + 1 < input.length) {
+        // Linear interpolation between two samples
+        output[i] = input[index] * (1.0 - fraction) + input[index + 1] * fraction;
+      } else {
+        // Last sample, no interpolation
+        output[i] = input[index];
+      }
+    }
+    
+    return output;
   }
   
   /// Validate audio file format and duration

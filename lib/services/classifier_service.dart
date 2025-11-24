@@ -35,9 +35,9 @@ class ClassifierService {
     try {
       print('📦 Loading TFLite model...');
       
-      // Load model
+      // Load model (non-quantized version for better accuracy)
       _interpreter = await Interpreter.fromAsset(
-        'assets/models/audio_classifier_quantized.tflite',
+        'assets/models/audio_classifier.tflite',
         options: InterpreterOptions()..threads = 4,
       );
       
@@ -84,18 +84,79 @@ class ClassifierService {
     print('   2️⃣ Preparing model input...');
     final input = AudioProcessor.toModelInput(melSpec);
     
+    // ========== DEBUG: Input to Model ==========
+    print('\n' + '='*60);
+    print('🔬 DEBUG: Input to Model');
+    print('='*60);
+    
+    // Get input statistics
+    double minVal = double.infinity;
+    double maxVal = double.negativeInfinity;
+    double sum = 0;
+    int count = 0;
+    
+    for (var batch in input) {
+      for (var mel in batch) {
+        for (var time in mel) {
+          for (var channel in time) {
+            double val = channel;
+            if (val < minVal) minVal = val;
+            if (val > maxVal) maxVal = val;
+            sum += val;
+            count++;
+          }
+        }
+      }
+    }
+    
+    double mean = sum / count;
+    
+    print('Input shape: (${input.length}, ${input[0].length}, ${input[0][0].length}, ${input[0][0][0].length})');
+    print('Input min: ${minVal.toStringAsFixed(2)} dB');
+    print('Input max: ${maxVal.toStringAsFixed(2)} dB');
+    print('Input mean: ${mean.toStringAsFixed(2)} dB');
+    
+    // Print first 10 values (mel band 0)
+    List<double> first10 = [];
+    for (int i = 0; i < 10 && i < input[0][0].length; i++) {
+      first10.add(input[0][0][i][0]);
+    }
+    print('First 10 time frames (mel band 0):');
+    print('  ${first10.map((v) => v.toStringAsFixed(2)).join(", ")}');
+    
+    print('='*60);
+    // ========== END DEBUG ==========
+    
     // 3. Create output buffer
     // Output shape: (1, 1) for binary classification with sigmoid
     var output = List.filled(1, 0.0).reshape([1, 1]);
     
     // 4. Run inference
-    print('   3️⃣ Running TFLite inference...');
+    print('\n   3️⃣ Running TFLite inference...');
     _interpreter!.run(input, output);
     
     // 5. Process output
-    print('   4️⃣ Processing results...');
-    double probSkizofrenia = output[0][0];
-    double probNormal = 1.0 - probSkizofrenia;
+    print('\n   4️⃣ Processing results...');
+    
+    // ========== DEBUG: Model Output ==========
+    print('\n' + '='*60);
+    print('🔬 DEBUG: Model Output');
+    print('='*60);
+    print('Raw output shape: (${output.length}, ${output[0].length})');
+    print('Raw output[0][0]: ${output[0][0]}');
+    print('Output type: ${output[0][0].runtimeType}');
+    print('='*60 + '\n');
+    // ========== END DEBUG ==========
+    
+    print('   Raw model output (sigmoid): ${output[0][0]}');
+    
+    // Model output: sigmoid probability for class 1 (skizofrenia)
+    double rawOutput = output[0][0];
+    double probSkizofrenia = rawOutput;
+    double probNormal = 1.0 - rawOutput;
+    
+    print('   Prob Normal: ${(probNormal * 100).toStringAsFixed(2)}%');
+    print('   Prob Skizofrenia: ${(probSkizofrenia * 100).toStringAsFixed(2)}%');
     
     List<double> probabilities = [probNormal, probSkizofrenia];
     int predictedIndex = probNormal > probSkizofrenia ? 0 : 1;
@@ -106,6 +167,7 @@ class ClassifierService {
     
     print('✅ Inference complete!');
     print('   Time: ${stopwatch.elapsedMilliseconds}ms');
+    print('   Predicted Index: $predictedIndex');
     print('   Result: $predictedClass (${(confidence * 100).toStringAsFixed(1)}%)');
     
     return ClassificationResult(
@@ -142,10 +204,10 @@ class ClassificationResult {
   
   // Helper getters for easier access
   String get predictedLabel => predictedClass;
-  int get predictedIndex => predictedClass == 'Normal' ? 0 : 1;
+  int get predictedIndex => predictedClass.toLowerCase() == 'normal' ? 0 : 1;
   List<double> get probabilitiesList => [
-    probabilities['Normal'] ?? 0.0,
-    probabilities['Skizofrenia'] ?? 0.0,
+    probabilities['normal'] ?? 0.0,
+    probabilities['skizofrenia'] ?? 0.0,
   ];
   
   bool get isNormal => predictedClass.toLowerCase() == 'normal';

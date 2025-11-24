@@ -297,7 +297,18 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ## 🆕 Recent Updates
 
-### v1.2.0 (Latest)
+### v1.3.0 (Latest) - CRITICAL FIX
+- 🐛 **CRITICAL**: Fixed model bias to "Normal" class
+- ⚡ **ROOT CAUSE**: Preprocessing mismatch between Python and Flutter
+- ✅ Removed incorrect [0,1] normalization (not in Python training)
+- ✅ Implemented librosa-compatible Mel filterbank
+- ✅ Fixed power-to-dB conversion with correct ref=np.max
+- ✅ Changed STFT from magnitude to power spectrum
+- 📊 Added preprocessing validation and debug statistics
+- 🎯 **Expected**: Balanced predictions matching Python accuracy (~90%+)
+- 📦 New file: `mel_filterbank.dart` (librosa-compatible)
+
+### v1.2.0
 - ✨ **NEW**: Audio playback feature for recorded and uploaded files
 - ✨ **NEW**: Play/Pause/Stop controls with purple gradient card
 - ✨ **NEW**: Enhanced loading spinner with graphic equalizer animation

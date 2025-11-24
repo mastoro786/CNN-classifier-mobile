@@ -297,7 +297,17 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ## 🆕 Recent Updates
 
-### v1.3.0 (Latest) - CRITICAL FIX
+### v1.4.0 (Latest) - UX Enhancement
+- ✨ **NEW**: Silence detection before classification
+- ✨ **NEW**: Beautiful result popup dialog with color-coded results
+- 🔇 Auto-detect silent/empty audio (RMS energy threshold)
+- 🎨 Result dialog with confidence bars and processing time
+- 🎨 Removed "AI-Powered" text, changed to "Analisis Audio Berbasis CNN"
+- 🐛 Fixed loading spinner visibility with WillPopScope
+- 📱 Better user feedback with alert dialogs
+- 🚀 No more processing of empty recordings
+
+### v1.3.0 - CRITICAL FIX
 - 🐛 **CRITICAL**: Fixed model bias to "Normal" class
 - ⚡ **ROOT CAUSE**: Preprocessing mismatch between Python and Flutter
 - ✅ Removed incorrect [0,1] normalization (not in Python training)

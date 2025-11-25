@@ -5,6 +5,7 @@ import '../providers/audio_provider.dart';
 import '../widgets/gradient_header.dart';
 import '../widgets/recording_button.dart';
 import '../widgets/upload_button.dart';
+import '../widgets/audio_visualization_dialog.dart';
 import '../services/database_helper.dart';
 import '../models/analysis_history.dart';
 import 'history_screen.dart';
@@ -413,7 +414,10 @@ class _ClassifierScreenState extends State<ClassifierScreen>
 
       // Run classification
       try {
-        final result = await _classifier.classify(audioData);
+        final result = await _classifier.classify(
+          audioData,
+          includeVisualizationData: true,
+        );
         audioProvider.setResult(result);
         
         // Close loading dialog
@@ -499,9 +503,32 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         }
       }
 
-      // TEMPORARY: Silence check disabled for debugging
-      // Will log audio energy to console for threshold tuning
-      _classifier.isSilence(audioData); // Just log, don't block
+      // Check if recording contains actual voice (not silence)
+      final isSilent = _classifier.isSilence(audioData);
+      if (isSilent) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.mic_off, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '⚠️ No voice detected! Please speak clearly during recording.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        audioProvider.setError('No voice detected - silence');
+        return;
+      }
       
       // Show processing
       audioProvider.setProcessing(true);
@@ -571,9 +598,13 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       // Wait for dialog to render
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Run classification
+      // Run classification with power compression for recording
       try {
-        final result = await _classifier.classify(audioData);
+        final result = await _classifier.classify(
+          audioData,
+          includeVisualizationData: true,
+          applyPreEmphasis: true, // Reuse this flag for power compression
+        );
         audioProvider.setResult(result);
         
         // Close loading dialog
@@ -746,7 +777,34 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                
+                // Visualization button (if data available)
+                if (result.audioData != null && result.melSpectrogram != null)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AudioVisualizationDialog(
+                            audioData: result.audioData!,
+                            melSpectrogram: result.melSpectrogram!,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.graphic_eq),
+                    label: const Text('Lihat Waveform & Spectrogram'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF6366F1),
+                      side: const BorderSide(color: Color(0xFF6366F1)),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
                 
                 // Processing time
                 Text(
@@ -819,8 +877,8 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                           final name = nameController.text.trim();
                           if (name.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Row(
+                              const SnackBar(
+                                content: Row(
                                   children: [
                                     Icon(Icons.error_outline, color: Colors.white),
                                     SizedBox(width: 12),
@@ -830,7 +888,7 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                                   ],
                                 ),
                                 backgroundColor: Colors.red,
-                                duration: const Duration(seconds: 2),
+                                duration: Duration(seconds: 2),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );

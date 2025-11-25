@@ -23,11 +23,41 @@ class AudioProcessor {
   
   /// Extract Mel Spectrogram - FIXED VERSION
   static Future<List<List<double>>> extractMelSpectrogram(
-    Float32List audioSamples,
-  ) async {
+    Float32List audioSamples, {
+    bool applyPreEmphasis = false,
+  }) async {
     print('📊 Extracting Mel Spectrogram (FIXED)...');
     print('   Sample rate: $sampleRate Hz');
     print('   Audio length: ${audioSamples.length} samples');
+    
+    // DEBUG: Audio samples statistics
+    if (audioSamples.isNotEmpty) {
+      double min = audioSamples[0];
+      double max = audioSamples[0];
+      double sum = 0.0;
+      double sumSquares = 0.0;
+      
+      for (var sample in audioSamples) {
+        if (sample < min) min = sample;
+        if (sample > max) max = sample;
+        sum += sample.abs(); // Use absolute for average amplitude
+        sumSquares += sample * sample;
+      }
+      
+      final avgAbs = sum / audioSamples.length;
+      final rms = (sumSquares / audioSamples.length);
+      
+      print('   📈 Input Audio Stats:');
+      print('      Min: ${min.toStringAsFixed(6)}');
+      print('      Max: ${max.toStringAsFixed(6)}');
+      print('      Avg Abs: ${avgAbs.toStringAsFixed(6)}');
+      print('      RMS: ${rms.toStringAsFixed(6)}');
+      print('      Peak: ${max.abs() > min.abs() ? max.abs() : min.abs()}');
+      print('      First 5: ${audioSamples.sublist(0, 5).map((e) => e.toStringAsFixed(4)).join(", ")}');
+    }
+    
+    // Note: applyPreEmphasis flag is now used for power compression
+    // No pre-emphasis on audio samples (it made signal too weak)
     
     // 1. STFT (Short-Time Fourier Transform)
     List<List<double>> stft = await _computeSTFT(audioSamples);
@@ -67,6 +97,18 @@ class AudioProcessor {
     print('   Max: ${melMax.toStringAsFixed(4)}');
     print('   Mean: ${(melSum / melCount).toStringAsFixed(4)}');
     print('   Min: ${melMin.toStringAsFixed(4)}');
+    
+    // 3.5. Apply power compression to reduce dynamic range (for recordings)
+    // Use cube root compression: P' = P^(1/3) - less aggressive than sqrt
+    // This helps recordings match file upload characteristics
+    if (applyPreEmphasis) { // Use this flag to enable compression for recordings
+      for (int i = 0; i < melSpec.length; i++) {
+        for (int j = 0; j < melSpec[i].length; j++) {
+          melSpec[i][j] = pow(melSpec[i][j], 1.0 / 3.0).toDouble();
+        }
+      }
+      print('   📐 Power compression applied (cube root)');
+    }
     
     // 4. Convert to dB scale (librosa-style: ref=max)
     List<List<double>> melSpecDB = _powerToDbLibrosa(melSpec);
@@ -258,6 +300,22 @@ class AudioProcessor {
     }
     
     return input;
+  }
+  
+  /// Apply pre-emphasis filter to boost high frequencies
+  /// Pre-emphasis: y[n] = x[n] - α * x[n-1], where α = 0.97
+  /// This is common in speech processing to compensate for high-frequency loss
+  static Float32List _applyPreEmphasis(Float32List audio, {double coefficient = 0.97}) {
+    if (audio.length < 2) return audio;
+    
+    final Float32List emphasized = Float32List(audio.length);
+    emphasized[0] = audio[0]; // First sample unchanged
+    
+    for (int i = 1; i < audio.length; i++) {
+      emphasized[i] = audio[i] - coefficient * audio[i - 1];
+    }
+    
+    return emphasized;
   }
   
   /// Debug: Print value statistics

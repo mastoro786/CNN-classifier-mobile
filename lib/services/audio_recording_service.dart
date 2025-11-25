@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -40,12 +41,16 @@ class AudioRecordingService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       _recordingPath = '${tempDir.path}/recording_$timestamp.wav';
       
-      // Start recording
+      // Start recording with explicit config
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.wav,
-          sampleRate: 22050, // Match model's expected sample rate
-          numChannels: 1,    // Mono
+          sampleRate: 22050,     // Match model's expected sample rate
+          numChannels: 1,        // Mono (critical!)
+          bitRate: 128000,       // 128 kbps
+          autoGain: false,       // Disable auto gain (preserve natural amplitude)
+          echoCancel: false,     // Disable echo cancellation (preserve natural audio)
+          noiseSuppress: false,  // Disable noise suppression (preserve natural audio)
         ),
         path: _recordingPath!,
       );
@@ -87,7 +92,7 @@ class AudioRecordingService {
       print('📊 Audio samples: ${audioSamples.length}');
       print('📊 Duration: ${(audioSamples.length / 22050).toStringAsFixed(2)}s');
       
-      // Debug: Audio statistics
+      // Debug: Audio statistics BEFORE normalization
       if (audioSamples.isNotEmpty) {
         double min = audioSamples[0];
         double max = audioSamples[0];
@@ -105,19 +110,35 @@ class AudioRecordingService {
         final rms = (sumSquares / audioSamples.length);
         final energy = rms;
         
-        print('📊 Recording audio statistics:');
-        print('   Min: ${min.toStringAsFixed(6)}');
-        print('   Max: ${max.toStringAsFixed(6)}');
-        print('   Mean: ${mean.toStringAsFixed(6)}');
-        print('   RMS Energy: ${energy.toStringAsFixed(8)}');
-        print('   First 10 samples: ${audioSamples.sublist(0, audioSamples.length >= 10 ? 10 : audioSamples.length).map((e) => e.toStringAsFixed(6)).join(", ")}');
-      }
-      
-      // Save path for playback (don't delete file yet)
-      _lastRecordingPath = path;
-      
-      return audioSamples;
-    } catch (e) {
+      print('📊 Recording audio statistics (RAW):');
+      print('   Min: ${min.toStringAsFixed(6)}');
+      print('   Max: ${max.toStringAsFixed(6)}');
+      print('   Mean: ${mean.toStringAsFixed(6)}');
+      print('   RMS Energy: ${energy.toStringAsFixed(8)}');
+      print('   First 10 samples: ${audioSamples.sublist(0, audioSamples.length >= 10 ? 10 : audioSamples.length).map((e) => e.toStringAsFixed(6)).join(", ")}');
+    }
+    
+    // Remove DC offset (mean centering)
+    final dcRemovedSamples = _removeDCOffset(audioSamples);
+    
+    // Trim silence from beginning and end
+    final trimmedSamples = _trimSilence(dcRemovedSamples, threshold: 0.01);
+    print('✂️ Trimmed silence: ${audioSamples.length} → ${trimmedSamples.length} samples');
+    
+    // Apply high-pass filter to remove low-frequency noise (below 80 Hz)
+    final filteredSamples = _applyHighPassFilter(trimmedSamples);
+    
+    // Apply soft clipping to reduce peaks
+    final clippedSamples = _applySoftClipping(filteredSamples, threshold: 0.6);
+    
+    // Normalize amplitude to match typical file upload levels
+    final normalizedSamples = _smartNormalize(clippedSamples);
+    
+    // Save path for playback (don't delete file yet)
+    _lastRecordingPath = path;
+    
+    print('✅ Returning processed audio samples');
+    return normalizedSamples;    } catch (e) {
       print('❌ Error stopping recording: $e');
       rethrow;
     }
@@ -286,6 +307,220 @@ class AudioRecordingService {
     }
     
     return output;
+  }
+  
+  /// Apply soft clipping to compress loud peaks using tanh function
+  /// This reduces dynamic range while preserving quieter sounds
+  Float32List _applySoftClipping(Float32List audio, {double threshold = 0.6}) {
+    if (audio.isEmpty) return audio;
+    
+    final clipped = Float32List(audio.length);
+    
+    for (int i = 0; i < audio.length; i++) {
+      final sample = audio[i];
+      final absValue = sample.abs();
+      
+      if (absValue > threshold) {
+        // Apply soft clipping using sigmoid-like compression
+        final sign = sample > 0 ? 1.0 : -1.0;
+        final excess = (absValue - threshold) / (1.0 - threshold);
+        // Simple compression: y = threshold + (1-threshold) * x / (1 + x)
+        final compressed = threshold + (1.0 - threshold) * excess / (1.0 + excess);
+        clipped[i] = sign * compressed;
+      } else {
+        clipped[i] = sample;
+      }
+    }
+    
+    print('📉 Soft clipping applied (threshold: $threshold)');
+    return clipped;
+  }
+  
+  /// Apply simple high-pass filter to remove low-frequency rumble/noise
+  /// Uses first-order IIR high-pass filter with cutoff ~80 Hz
+  Float32List _applyHighPassFilter(Float32List audio) {
+    if (audio.length < 2) return audio;
+    
+    // High-pass filter coefficient (cutoff ~80 Hz at 22050 Hz sample rate)
+    const double alpha = 0.98;
+    
+    final filtered = Float32List(audio.length);
+    filtered[0] = audio[0];
+    
+    for (int i = 1; i < audio.length; i++) {
+      filtered[i] = alpha * (filtered[i - 1] + audio[i] - audio[i - 1]);
+    }
+    
+    print('🎚️ High-pass filter applied (cutoff ~80 Hz)');
+    return filtered;
+  }
+  
+  /// Remove DC offset by subtracting mean
+  Float32List _removeDCOffset(Float32List audio) {
+    if (audio.isEmpty) return audio;
+    
+    // Calculate mean
+    double sum = 0.0;
+    for (var sample in audio) {
+      sum += sample;
+    }
+    final mean = sum / audio.length;
+    
+    // Only remove if DC offset is significant
+    if (mean.abs() < 0.001) {
+      return audio; // DC offset negligible
+    }
+    
+    // Subtract mean from all samples
+    final corrected = Float32List(audio.length);
+    for (int i = 0; i < audio.length; i++) {
+      corrected[i] = audio[i] - mean;
+    }
+    
+    print('🔧 DC offset removed: ${mean.toStringAsFixed(6)}');
+    return corrected;
+  }
+  
+  /// Trim silence from beginning and end of audio using energy detection
+  Float32List _trimSilence(Float32List audio, {double threshold = 0.01}) {
+    if (audio.isEmpty) return audio;
+    
+    // Use energy-based detection in windows for more robust trimming
+    const int windowSize = 441; // 20ms window at 22050 Hz
+    int start = 0;
+    int end = audio.length - 1;
+    
+    // Find first non-silent window
+    for (int i = 0; i < audio.length - windowSize; i += windowSize ~/ 2) {
+      double energy = 0.0;
+      for (int j = 0; j < windowSize && i + j < audio.length; j++) {
+        energy += audio[i + j].abs();
+      }
+      double avgEnergy = energy / windowSize;
+      
+      if (avgEnergy > threshold) {
+        start = i;
+        break;
+      }
+    }
+    
+    // Find last non-silent window
+    for (int i = audio.length - windowSize; i >= 0; i -= windowSize ~/ 2) {
+      double energy = 0.0;
+      for (int j = 0; j < windowSize && i + j < audio.length; j++) {
+        energy += audio[i + j].abs();
+      }
+      double avgEnergy = energy / windowSize;
+      
+      if (avgEnergy > threshold) {
+        end = i + windowSize;
+        break;
+      }
+    }
+    
+    // Add minimal padding (50ms = 1102 samples)
+    const int padding = 1102;
+    start = (start - padding).clamp(0, audio.length);
+    end = (end + padding).clamp(0, audio.length - 1);
+    
+    if (start >= end) {
+      print('⚠️ Audio is completely silent!');
+      return audio;
+    }
+    
+    print('   Trimmed range: $start to $end');
+    return Float32List.sublistView(audio, start, end + 1);
+  }
+  
+  /// Smart normalization - RMS-based to match file upload characteristics
+  Float32List _smartNormalize(Float32List audio) {
+    if (audio.isEmpty) return audio;
+    
+    // Calculate RMS (Root Mean Square)
+    double sumSquares = 0.0;
+    for (var sample in audio) {
+      sumSquares += sample * sample;
+    }
+    final rms = sqrt(sumSquares / audio.length);
+    
+    if (rms < 0.001) {
+      print('⚠️ Audio too quiet, skipping normalization');
+      return audio;
+    }
+    
+    // Target RMS: 0.0265 to match file upload exactly
+    // File normal has RMS energy ~0.000704 = sqrt(0.000704) ≈ 0.0265
+    // This should produce Mel Spec Max ~400 and Mean dB ~-60
+    const double targetRMS = 0.0265;
+    
+    // Calculate scale factor
+    final scale = targetRMS / rms;
+    
+    // Apply normalization
+    final normalized = Float32List(audio.length);
+    for (int i = 0; i < audio.length; i++) {
+      normalized[i] = (audio[i] * scale).clamp(-1.0, 1.0);
+    }
+    
+    print('🔊 RMS Normalized: ${rms.toStringAsFixed(6)} → ${targetRMS.toStringAsFixed(6)} (scale: ${scale.toStringAsFixed(2)}x)');
+    
+    // Verify final RMS
+    double finalSumSquares = 0.0;
+    for (var sample in normalized) {
+      finalSumSquares += sample * sample;
+    }
+    final finalRMS = sqrt(finalSumSquares / normalized.length);
+    print('   Final RMS: ${finalRMS.toStringAsFixed(6)}');
+    
+    return normalized;
+  }
+  
+  /// Save last recording to Downloads folder for analysis
+  Future<String?> saveRecordingForAnalysis() async {
+    try {
+      if (_lastRecordingPath == null) {
+        print('⚠️ No recording to save');
+        return null;
+      }
+      
+      final File sourceFile = File(_lastRecordingPath!);
+      if (!await sourceFile.exists()) {
+        print('⚠️ Recording file not found: $_lastRecordingPath');
+        return null;
+      }
+      
+      // Get Downloads directory (for Android)
+      Directory? downloadsDir;
+      if (Platform.isAndroid) {
+        downloadsDir = Directory('/storage/emulated/0/Download');
+      } else {
+        downloadsDir = await getDownloadsDirectory();
+      }
+      
+      if (downloadsDir == null || !await downloadsDir.exists()) {
+        // Fallback to external storage
+        downloadsDir = await getExternalStorageDirectory();
+      }
+      
+      if (downloadsDir == null) {
+        print('⚠️ Could not find downloads directory');
+        return null;
+      }
+      
+      // Create filename with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final destPath = '${downloadsDir.path}/recording_analysis_$timestamp.wav';
+      
+      // Copy file
+      await sourceFile.copy(destPath);
+      
+      print('💾 Recording saved for analysis: $destPath');
+      return destPath;
+      
+    } catch (e) {
+      print('❌ Error saving recording: $e');
+      return null;
+    }
   }
   
   /// Dispose resources

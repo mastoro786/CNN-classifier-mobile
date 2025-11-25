@@ -11,7 +11,8 @@ class ClassifierService {
   bool get isLoaded => _interpreter != null;
   
   /// Check if audio is silence (no voice detected)
-  bool isSilence(Float32List samples, {double threshold = 0.0001}) {
+  /// Uses RMS energy threshold optimized for speech detection
+  bool isSilence(Float32List samples, {double threshold = 0.0005}) {
     if (samples.isEmpty) return true;
     
     // Calculate RMS (Root Mean Square) energy
@@ -19,15 +20,28 @@ class ClassifierService {
     for (var sample in samples) {
       sumSquares += sample * sample;
     }
-    double rms = sumSquares / samples.length;
-    double energy = rms;
+    double energy = sumSquares / samples.length;
     
-    print('🔊 Audio energy: ${energy.toStringAsFixed(8)} (threshold: $threshold)');
+    // Also check peak amplitude to detect very quiet recordings
+    double maxAbs = 0.0;
+    for (var sample in samples) {
+      final abs = sample.abs();
+      if (abs > maxAbs) maxAbs = abs;
+    }
+    
+    print('🔊 Audio energy check:');
+    print('   RMS Energy: ${energy.toStringAsFixed(8)}');
+    print('   Peak Amplitude: ${maxAbs.toStringAsFixed(6)}');
+    print('   Threshold: $threshold');
     print('   Samples count: ${samples.length}');
     print('   First 10 samples: ${samples.take(10).toList()}');
-    print('   Is silence: ${energy < threshold}');
     
-    return energy < threshold;
+    // Consider silence if BOTH energy is low AND peak amplitude is very low
+    // Adjusted thresholds for normalized audio
+    final isSilent = energy < threshold && maxAbs < 0.005;
+    print('   Is silence: $isSilent (energy < $threshold AND peak < 0.005)');
+    
+    return isSilent;
   }
   
   /// Load TFLite model
@@ -68,7 +82,11 @@ class ClassifierService {
   }
   
   /// Run inference on audio
-  Future<ClassificationResult> classify(Float32List audioSamples) async {
+  Future<ClassificationResult> classify(
+    Float32List audioSamples, {
+    bool includeVisualizationData = false,
+    bool applyPreEmphasis = false,
+  }) async {
     if (!isLoaded) {
       throw Exception('Model not loaded. Call loadModel() first.');
     }
@@ -78,14 +96,17 @@ class ClassifierService {
     
     // 1. Extract features
     print('   1️⃣ Extracting Mel Spectrogram...');
-    final melSpec = await AudioProcessor.extractMelSpectrogram(audioSamples);
+    final melSpec = await AudioProcessor.extractMelSpectrogram(
+      audioSamples,
+      applyPreEmphasis: applyPreEmphasis,
+    );
     
     // 2. Prepare input
     print('   2️⃣ Preparing model input...');
     final input = AudioProcessor.toModelInput(melSpec);
     
     // ========== DEBUG: Input to Model ==========
-    print('\n' + '='*60);
+    print('\n${'='*60}');
     print('🔬 DEBUG: Input to Model');
     print('='*60);
     
@@ -139,7 +160,7 @@ class ClassifierService {
     print('\n   4️⃣ Processing results...');
     
     // ========== DEBUG: Model Output ==========
-    print('\n' + '='*60);
+    print('\n${'='*60}');
     print('🔬 DEBUG: Model Output');
     print('='*60);
     print('Raw output shape: (${output.length}, ${output[0].length})');
@@ -178,6 +199,8 @@ class ClassifierService {
         _labels[1]: probabilities[1],
       },
       inferenceTime: stopwatch.elapsedMilliseconds,
+      audioData: includeVisualizationData ? audioSamples : null,
+      melSpectrogram: includeVisualizationData ? melSpec : null,
     );
   }
   
@@ -194,12 +217,16 @@ class ClassificationResult {
   final double confidence;
   final Map<String, double> probabilities;
   final int inferenceTime;
+  final Float32List? audioData;
+  final List<List<double>>? melSpectrogram;
   
   ClassificationResult({
     required this.predictedClass,
     required this.confidence,
     required this.probabilities,
     required this.inferenceTime,
+    this.audioData,
+    this.melSpectrogram,
   });
   
   // Helper getters for easier access

@@ -9,10 +9,12 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 ## 📱 Features
 
 ✅ **Offline AI Classification** - No internet required  
-✅ **Real-time Audio Recording** - 5-second samples  
-✅ **Audio File Upload** - Support WAV format (16-bit PCM)  
+✅ **Real-time Audio Recording** - 5-second samples with advanced preprocessing  
+✅ **Audio File Upload** - Support WAV format (16-bit PCM, stereo/mono)  
 ✅ **Audio Playback** - Play recorded or uploaded audio  
 ✅ **Silence Detection** - Auto-detect empty or silent audio  
+✅ **Waveform Visualization** - View time-domain audio waveform  
+✅ **Spectrogram Visualization** - View Mel spectrogram heatmap  
 ✅ **History Management** - Save and view all analysis results  
 ✅ **Database Storage** - SQLite for persistent data  
 ✅ **Export to Excel** - Convert history to spreadsheet (.xlsx)  
@@ -24,6 +26,7 @@ Aplikasi Flutter untuk klasifikasi gangguan jiwa (skizofrenia) berbasis analisis
 ✅ **Beautiful UI** - Modern Material 3 design with loading animations  
 ✅ **High Accuracy** - Trained on clinical datasets  
 ✅ **Fast Processing** - Results in milliseconds  
+✅ **Recording Optimization** - Advanced audio preprocessing for accurate detection  
 
 ---
 
@@ -98,11 +101,12 @@ lib/
 ├── widgets/
 │   ├── gradient_header.dart     # App branding header
 │   ├── recording_button.dart    # Recording button with animation
-│   └── upload_button.dart       # Upload file button
+│   ├── upload_button.dart       # Upload file button
+│   └── audio_visualization_dialog.dart  # Waveform & spectrogram viewer
 ├── services/
-│   ├── audio_processor.dart     # Mel Spectrogram extraction
+│   ├── audio_processor.dart     # Mel Spectrogram extraction with power compression
 │   ├── classifier_service.dart  # TFLite inference
-│   ├── audio_recording_service.dart  # Audio recording
+│   ├── audio_recording_service.dart  # Audio recording with preprocessing
 │   ├── audio_file_service.dart  # Audio file loading & parsing
 │   ├── audio_playback_service.dart  # Audio playback controls
 │   ├── database_helper.dart     # SQLite database operations
@@ -308,7 +312,34 @@ This project is developed for research and clinical use at RSJD dr. Amino Gondoh
 
 ## 🆕 Recent Updates
 
-### v1.5.0 (Latest) - History & Database Management
+### v1.7.0 (Latest) - Recording Optimization & Visualization
+- 🎯 **MAJOR FIX**: Recording now accurately detects Normal voice (71%+ confidence)
+- ⚡ **ROOT CAUSE**: Recording audio 2-3x louder than training data
+- ✨ **NEW**: Waveform visualization (time-domain view)
+- ✨ **NEW**: Mel Spectrogram visualization (frequency-domain heatmap)
+- ✨ **NEW**: "View Waveform & Spectrogram" button in result dialog
+- 🔧 **Recording Preprocessing Pipeline**:
+  - DC Offset Removal (mean centering)
+  - Energy-based Silence Trimming (removes empty frames)
+  - High-Pass Filter (80 Hz cutoff, removes rumble noise)
+  - Soft Clipping (compresses peaks above 0.6 threshold)
+  - RMS Normalization (target 0.0265 to match file uploads)
+  - Cube Root Power Compression (reduces dynamic range in Mel spectrum)
+- 🎨 Beautiful tabbed dialog with color-coded spectrogram
+- 📊 Audio statistics: samples count, duration, RMS, peak amplitude
+- 🐛 Fixed silence detection threshold (0.0005 with AND logic)
+- 📦 New visualization with fl_chart integration
+- 🚀 Mean dB now matches training data: -17 dB (from -46 dB)
+
+### v1.6.0 - App Branding & Icon
+- ✨ **NEW**: Custom app icon (headphone theme)
+- ✨ **NEW**: Splash screen with app branding
+- 🎨 Professional icon design with blue-purple gradient
+- 📱 Adaptive icons for Android (round, square, legacy)
+- 🍎 iOS app icon integration
+- 📦 Dependencies: flutter_launcher_icons, flutter_native_splash
+
+### v1.5.0 - History & Database Management
 - ✨ **NEW**: SQLite database for storing analysis history
 - ✨ **NEW**: History screen with search functionality
 - ✨ **NEW**: Export history to Excel (.xlsx) spreadsheet

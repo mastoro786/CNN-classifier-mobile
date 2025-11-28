@@ -1,8 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/analysis_history.dart';
+import '../models/user.dart';
 
-/// Database helper for managing analysis history
+/// Database helper for managing analysis history and users
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
@@ -23,8 +24,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Increment version for migration
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -36,17 +38,58 @@ class DatabaseHelper {
     const intType = 'INTEGER NOT NULL';
     const textTypeNullable = 'TEXT';
 
+    // Users table
+    await db.execute('''
+      CREATE TABLE users (
+        id $idType,
+        username $textType UNIQUE,
+        password $textType,
+        full_name $textType,
+        created_at $textType
+      )
+    ''');
+
+    // Analysis history table with user_id foreign key
     await db.execute('''
       CREATE TABLE analysis_history (
         id $idType,
+        user_id $intType,
         patientName $textType,
         analysisDate $textType,
         result $textType,
         confidence $realType,
         inferenceTime $intType,
-        audioFilePath $textTypeNullable
+        audioFilePath $textTypeNullable,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  /// Upgrade database schema
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add users table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+
+      // Add user_id column to analysis_history
+      await db.execute('''
+        ALTER TABLE analysis_history ADD COLUMN user_id INTEGER DEFAULT 1
+      ''');
+
+      // Create default admin user for existing data
+      await db.execute('''
+        INSERT OR IGNORE INTO users (id, username, password, full_name, created_at)
+        VALUES (1, 'admin', 'admin123', 'Administrator', '${DateTime.now().toIso8601String()}')
+      ''');
+    }
   }
 
   /// Insert new analysis record
@@ -61,6 +104,18 @@ class DatabaseHelper {
     final db = await database;
     const orderBy = 'analysisDate DESC';
     final result = await db.query('analysis_history', orderBy: orderBy);
+    return result.map((json) => AnalysisHistory.fromMap(json)).toList();
+  }
+
+  /// Get analysis records by user ID (newest first)
+  Future<List<AnalysisHistory>> getHistoryByUserId(int userId) async {
+    final db = await database;
+    final result = await db.query(
+      'analysis_history',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'analysisDate DESC',
+    );
     return result.map((json) => AnalysisHistory.fromMap(json)).toList();
   }
 
@@ -162,6 +217,72 @@ class DatabaseHelper {
       history.toMap(),
       where: 'id = ?',
       whereArgs: [history.id],
+    );
+  }
+
+  // ==================== USER METHODS ====================
+
+  /// Insert new user
+  Future<int> insertUser(User user) async {
+    final db = await database;
+    return await db.insert('users', user.toMap());
+  }
+
+  /// Get user by ID
+  Future<User?> getUserById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return User.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// Get user by username
+  Future<User?> getUserByUsername(String username) async {
+    final db = await database;
+    final maps = await db.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+
+    if (maps.isNotEmpty) {
+      return User.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// Get all users
+  Future<List<User>> getAllUsers() async {
+    final db = await database;
+    final result = await db.query('users', orderBy: 'created_at DESC');
+    return result.map((json) => User.fromMap(json)).toList();
+  }
+
+  /// Update user
+  Future<int> updateUser(User user) async {
+    final db = await database;
+    return db.update(
+      'users',
+      user.toMap(),
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+  }
+
+  /// Delete user
+  Future<int> deleteUser(int id) async {
+    final db = await database;
+    return await db.delete(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import '../models/analysis_history.dart';
 import '../services/database_helper.dart';
+import '../providers/auth_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -26,7 +28,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadHistory() async {
     setState(() => _isLoading = true);
     try {
-      final history = await DatabaseHelper.instance.getAllHistory();
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.currentUser?.id;
+      
+      if (userId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      
+      final history = await DatabaseHelper.instance.getHistoryByUserId(userId);
       setState(() {
         _historyList = history;
         _isLoading = false;

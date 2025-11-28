@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/classifier_service.dart';
 import '../providers/audio_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/gradient_header.dart';
 import '../widgets/recording_button.dart';
 import '../widgets/upload_button.dart';
@@ -9,6 +10,7 @@ import '../widgets/audio_visualization_dialog.dart';
 import '../services/database_helper.dart';
 import '../models/analysis_history.dart';
 import 'history_screen.dart';
+import 'login_screen.dart';
 
 class ClassifierScreen extends StatefulWidget {
   const ClassifierScreen({super.key});
@@ -22,6 +24,12 @@ class _ClassifierScreenState extends State<ClassifierScreen>
   final ClassifierService _classifier = ClassifierService();
   bool _isLoading = true;
   late AnimationController _pulseController;
+  
+  // Recording feature toggle (disabled by default)
+  bool _isRecordingEnabled = false;
+  
+  // Recording preprocessing mode setting
+  String _preprocessMode = 'Standard'; // 'Conservative', 'Standard', 'Aggressive'
 
   @override
   void initState() {
@@ -55,10 +63,11 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text(
-          'Audio Classifier',
+          'CNN Mental Health Classifier',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.white,
+            fontSize: 18,
           ),
         ),
         centerTitle: true,
@@ -73,6 +82,39 @@ class _ClassifierScreenState extends State<ClassifierScreen>
           ),
         ),
         actions: [
+          // Toggle Recording Feature
+          IconButton(
+            icon: Icon(
+              _isRecordingEnabled ? Icons.mic : Icons.mic_off,
+              color: Colors.white,
+            ),
+            onPressed: () {
+              if (!_isRecordingEnabled) {
+                // Show disclaimer dialog before enabling
+                _showRecordingDisclaimerDialog();
+              } else {
+                // Disable directly
+                setState(() {
+                  _isRecordingEnabled = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('🔇 Fitur Recording Dinonaktifkan'),
+                    duration: Duration(seconds: 2),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            tooltip: _isRecordingEnabled ? 'Nonaktifkan Recording' : 'Aktifkan Recording',
+          ),
+          // Settings icon (only show when recording enabled)
+          if (_isRecordingEnabled)
+            IconButton(
+              icon: const Icon(Icons.tune, color: Colors.white),
+              onPressed: _showPreprocessModeDialog,
+              tooltip: 'Pengaturan Preprocessing',
+            ),
           IconButton(
             icon: const Icon(Icons.history, color: Colors.white),
             onPressed: () {
@@ -83,7 +125,89 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                 ),
               );
             },
-            tooltip: 'History Analisis',
+            tooltip: 'Riwayat Analisis',
+          ),
+          // Logout button
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.account_circle, color: Colors.white),
+            tooltip: 'Akun',
+            onSelected: (value) async {
+              if (value == 'logout') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Konfirmasi Logout'),
+                    content: const Text('Apakah Anda yakin ingin keluar?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Batal'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('Keluar'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true && mounted) {
+                  final authProvider = context.read<AuthProvider>();
+                  await authProvider.logout();
+                  
+                  if (mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (context) {
+              final authProvider = context.read<AuthProvider>();
+              return [
+                PopupMenuItem<String>(
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        authProvider.currentUser?.fullName ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '@${authProvider.currentUser?.username ?? ''}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.red),
+                      SizedBox(width: 12),
+                      Text('Keluar'),
+                    ],
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -121,36 +245,89 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Record audio button
-                            RecordingButton(
-                              isRecording: audioProvider.isRecording,
-                              isProcessing: audioProvider.isProcessing,
-                              onPressed: () => _handleRecording(audioProvider),
-                              pulseController: _pulseController,
-                            ),
-                            
-                            const SizedBox(height: 16),
-                            
-                            // Divider with text
-                            Row(
-                              children: [
-                                const Expanded(child: Divider()),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Text(
-                                    'OR',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
+                            // Record audio button (only show when enabled)
+                            if (_isRecordingEnabled) ...[
+                              RecordingButton(
+                                isRecording: audioProvider.isRecording,
+                                isProcessing: audioProvider.isProcessing,
+                                onPressed: () => _handleRecording(audioProvider),
+                                pulseController: _pulseController,
+                              ),
+                              
+                              const SizedBox(height: 8),
+                              
+                              // Preprocessing mode indicator
+                              Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _preprocessMode == 'Conservative' 
+                                      ? Colors.green.shade50
+                                      : _preprocessMode == 'Aggressive'
+                                      ? Colors.orange.shade50
+                                      : Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _preprocessMode == 'Conservative'
+                                        ? Colors.green.shade300
+                                        : _preprocessMode == 'Aggressive'
+                                        ? Colors.orange.shade300
+                                        : Colors.blue.shade300,
+                                    width: 1,
                                   ),
                                 ),
-                                const Expanded(child: Divider()),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.tune,
+                                      size: 14,
+                                      color: _preprocessMode == 'Conservative'
+                                          ? Colors.green.shade700
+                                          : _preprocessMode == 'Aggressive'
+                                          ? Colors.orange.shade700
+                                          : Colors.blue.shade700,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Preprocessing: $_preprocessMode',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: _preprocessMode == 'Conservative'
+                                            ? Colors.green.shade900
+                                            : _preprocessMode == 'Aggressive'
+                                            ? Colors.orange.shade900
+                                            : Colors.blue.shade900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                             
                             const SizedBox(height: 16),
+                          ],
+                            
+                            // Divider with text (only show when recording enabled)
+                            if (_isRecordingEnabled)
+                              Row(
+                                children: [
+                                  const Expanded(child: Divider()),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Text(
+                                      'ATAU',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(child: Divider()),
+                                ],
+                              ),
                             
                             // Upload audio button
                             UploadButton(
@@ -160,33 +337,48 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                             
                             const SizedBox(height: 12),
                             
-                            // Info about supported formats
+                            // Info about supported formats - Recommended method
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
+                                color: Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: Colors.blue.shade200,
-                                  width: 1,
+                                  color: Colors.green.shade300,
+                                  width: 1.5,
                                 ),
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Icon(
-                                    Icons.info_outline,
-                                    color: Colors.blue.shade700,
+                                    Icons.check_circle_outline,
+                                    color: Colors.green.shade700,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
-                                    child: Text(
-                                      'Supported formats: WAV (16-bit PCM)\nMax file size: 10 MB',
-                                      style: TextStyle(
-                                        color: Colors.blue.shade900,
-                                        fontSize: 12,
-                                        height: 1.4,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '✓ Metode Direkomendasikan',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade900,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Format: WAV (16-bit PCM)\nMax file size: 10 MB',
+                                          style: TextStyle(
+                                            color: Colors.green.shade800,
+                                            fontSize: 11,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -450,6 +642,9 @@ class _ClassifierScreenState extends State<ClassifierScreen>
       // Clear previous results
       audioProvider.clearResult();
 
+      // Set preprocessing mode before recording
+      audioProvider.setPreprocessingMode(_preprocessMode);
+
       // Start recording
       await audioProvider.startRecording();
 
@@ -462,6 +657,7 @@ class _ClassifierScreenState extends State<ClassifierScreen>
         builder: (context) => _RecordingDialog(
           duration: 5,
           onComplete: () => Navigator.of(context).pop(),
+          preprocessMode: _preprocessMode,
         ),
       );
 
@@ -847,6 +1043,55 @@ class _ClassifierScreenState extends State<ClassifierScreen>
                 ),
                 const SizedBox(height: 20),
                 
+                // Medical Disclaimer
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.blue.shade200,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue.shade700,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Disclaimer',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Hasil ini hanya sebagai alat screening awal dan tidak dapat menggantikan diagnosis profesional. Untuk diagnosis yang akurat dan penanganan yang tepat, silakan konsultasikan dengan tenaga medis profesional di RSJD (Rumah Sakit Jiwa Daerah).',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue.shade800,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
                 // Buttons
                 Row(
                   children: [
@@ -985,8 +1230,10 @@ class _ClassifierScreenState extends State<ClassifierScreen>
   }) async {
     try {
       final audioProvider = Provider.of<AudioProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
       final history = AnalysisHistory(
+        userId: authProvider.currentUser!.id!,
         patientName: patientName,
         analysisDate: DateTime.now(),
         result: result.predictedLabel,
@@ -1024,6 +1271,289 @@ class _ClassifierScreenState extends State<ClassifierScreen>
     }
   }
 
+  void _showRecordingDisclaimerDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must make a choice
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          Icons.warning_amber_rounded,
+          color: Colors.orange.shade700,
+          size: 48,
+        ),
+        title: const Text(
+          'Peringatan: Fitur Eksperimental',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.amber.shade800, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Tentang Fitur Recording:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Masih dalam tahap pengembangan\n'
+                      '• Hasil dapat bervariasi tergantung perangkat\n'
+                      '• Akurasi belum optimal untuk semua kondisi\n'
+                      '• Dipengaruhi oleh kualitas mikrofon dan lingkungan',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade900,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Untuk hasil terbaik, gunakan Upload File audio WAV yang direkam dengan kualitas baik.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade900,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Apakah Anda tetap ingin mengaktifkan fitur recording?',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Stay disabled
+            },
+            child: Text(
+              'BATAL',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _isRecordingEnabled = true;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🎙️ Fitur Recording Diaktifkan (Eksperimental)'),
+                  duration: Duration(seconds: 3),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('AKTIFKAN'),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+  }
+
+  void _showPreprocessModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Mode Preprocessing Audio',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.tips_and_updates, color: Colors.blue.shade700, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Coba mode berbeda jika hasil kurang akurat',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Pilih intensitas preprocessing untuk recording:',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+            RadioListTile<String>(
+              title: const Text('Konservatif'),
+              subtitle: const Text(
+                'Pemrosesan minimal. Cocok untuk lingkungan tenang dengan suara yang jelas.',
+                style: TextStyle(fontSize: 12),
+              ),
+              value: 'Conservative',
+              groupValue: _preprocessMode,
+              onChanged: (value) {
+                setState(() {
+                  _preprocessMode = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Mode preprocessing: Konservatif'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            RadioListTile<String>(
+              title: const Text('Standard (Direkomendasikan)'),
+              subtitle: const Text(
+                'Pemrosesan seimbang. Bekerja untuk sebagian besar kondisi recording.',
+                style: TextStyle(fontSize: 12),
+              ),
+              value: 'Standard',
+              groupValue: _preprocessMode,
+              onChanged: (value) {
+                setState(() {
+                  _preprocessMode = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Mode preprocessing: Standard'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            RadioListTile<String>(
+              title: const Text('Agresif'),
+              subtitle: const Text(
+                'Pemrosesan maksimal. Untuk lingkungan bising atau audio yang sulit.',
+                style: TextStyle(fontSize: 12),
+              ),
+              value: 'Aggressive',
+              groupValue: _preprocessMode,
+              onChanged: (value) {
+                setState(() {
+                  _preprocessMode = value!;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Mode preprocessing: Agresif'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange.shade700, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Hasil recording dapat bervariasi tergantung perangkat dan kondisi lingkungan',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.orange.shade900,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('TUTUP'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -1035,10 +1565,12 @@ class _ClassifierScreenState extends State<ClassifierScreen>
 class _RecordingDialog extends StatefulWidget {
   final int duration;
   final VoidCallback onComplete;
+  final String preprocessMode;
 
   const _RecordingDialog({
     required this.duration,
     required this.onComplete,
+    required this.preprocessMode,
   });
 
   @override

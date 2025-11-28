@@ -27,6 +27,24 @@ class AudioProvider extends ChangeNotifier {
   Float32List? get lastAudioSamples => _lastAudioSamples;
   String? get lastAudioFilePath => _lastAudioFilePath;
   
+  /// Set preprocessing mode for recording
+  void setPreprocessingMode(String mode) {
+    PreprocessingMode preprocessMode;
+    switch (mode) {
+      case 'Conservative':
+        preprocessMode = PreprocessingMode.conservative;
+        break;
+      case 'Aggressive':
+        preprocessMode = PreprocessingMode.aggressive;
+        break;
+      case 'Standard':
+      default:
+        preprocessMode = PreprocessingMode.standard;
+        break;
+    }
+    _recordingService.setPreprocessingMode(preprocessMode);
+  }
+  
   /// Start recording audio
   Future<void> startRecording() async {
     try {

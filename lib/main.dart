@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'screens/classifier_screen.dart';
+import 'screens/login_screen.dart';
 import 'providers/audio_provider.dart';
+import 'providers/auth_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Set preferred orientations
@@ -32,9 +34,10 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AudioProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
       ],
       child: MaterialApp(
-        title: 'Audio Classifier',
+        title: 'CNN Mental Health Classifier',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
@@ -80,7 +83,20 @@ class MyApp extends StatelessWidget {
             circularTrackColor: Color(0xFFE0E7FF),
           ),
         ),
-        home: const ClassifierScreen(),
+        home: Consumer<AuthProvider>(
+          builder: (context, authProvider, _) {
+            if (authProvider.isLoading) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            return authProvider.isLoggedIn 
+                ? const ClassifierScreen() 
+                : const LoginScreen();
+          },
+        ),
       ),
     );
   }

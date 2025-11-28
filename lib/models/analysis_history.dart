@@ -1,6 +1,7 @@
 /// Model for analysis history stored in SQLite
 class AnalysisHistory {
   final int? id;
+  final int userId; // Foreign key to users table
   final String patientName;
   final DateTime analysisDate;
   final String result; // Normal or Skizofrenia
@@ -10,6 +11,7 @@ class AnalysisHistory {
 
   AnalysisHistory({
     this.id,
+    required this.userId,
     required this.patientName,
     required this.analysisDate,
     required this.result,
@@ -22,6 +24,7 @@ class AnalysisHistory {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'user_id': userId,
       'patientName': patientName,
       'analysisDate': analysisDate.toIso8601String(),
       'result': result,
@@ -35,6 +38,7 @@ class AnalysisHistory {
   factory AnalysisHistory.fromMap(Map<String, dynamic> map) {
     return AnalysisHistory(
       id: map['id'] as int?,
+      userId: map['user_id'] as int? ?? 1, // Default to 1 for backward compatibility
       patientName: map['patientName'] as String,
       analysisDate: DateTime.parse(map['analysisDate'] as String),
       result: map['result'] as String,
@@ -60,6 +64,7 @@ class AnalysisHistory {
   /// Copy with method for updating
   AnalysisHistory copyWith({
     int? id,
+    int? userId,
     String? patientName,
     DateTime? analysisDate,
     String? result,
@@ -69,6 +74,7 @@ class AnalysisHistory {
   }) {
     return AnalysisHistory(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       patientName: patientName ?? this.patientName,
       analysisDate: analysisDate ?? this.analysisDate,
       result: result ?? this.result,

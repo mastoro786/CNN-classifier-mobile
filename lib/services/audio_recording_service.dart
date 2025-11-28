@@ -5,13 +5,30 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+/// Preprocessing mode for recording audio
+enum PreprocessingMode {
+  conservative, // Minimal processing - for clean, clear recordings
+  standard,     // Balanced processing - default (current implementation)
+  aggressive,   // Maximum processing - for noisy/problematic recordings
+}
+
 /// Service for recording audio from microphone
 class AudioRecordingService {
   final _recorder = AudioRecorder();
   String? _recordingPath;
   String? _lastRecordingPath;
+  PreprocessingMode _preprocessingMode = PreprocessingMode.standard;
   
   String? get lastRecordingPath => _lastRecordingPath;
+  
+  /// Get current preprocessing mode
+  PreprocessingMode get preprocessingMode => _preprocessingMode;
+  
+  /// Set preprocessing mode
+  void setPreprocessingMode(PreprocessingMode mode) {
+    _preprocessingMode = mode;
+    print('🎚️ Preprocessing mode set to: ${mode.name}');
+  }
   
   /// Check if microphone permission is granted
   Future<bool> checkPermission() async {
@@ -118,27 +135,33 @@ class AudioRecordingService {
       print('   First 10 samples: ${audioSamples.sublist(0, audioSamples.length >= 10 ? 10 : audioSamples.length).map((e) => e.toStringAsFixed(6)).join(", ")}');
     }
     
-    // Remove DC offset (mean centering)
-    final dcRemovedSamples = _removeDCOffset(audioSamples);
+    // Apply preprocessing based on selected mode
+    print('🎚️ Applying ${_preprocessingMode.name} preprocessing mode...');
     
-    // Trim silence from beginning and end
-    final trimmedSamples = _trimSilence(dcRemovedSamples, threshold: 0.01);
-    print('✂️ Trimmed silence: ${audioSamples.length} → ${trimmedSamples.length} samples');
+    Float32List processedSamples;
     
-    // Apply high-pass filter to remove low-frequency noise (below 80 Hz)
-    final filteredSamples = _applyHighPassFilter(trimmedSamples);
-    
-    // Apply soft clipping to reduce peaks
-    final clippedSamples = _applySoftClipping(filteredSamples, threshold: 0.6);
-    
-    // Normalize amplitude to match typical file upload levels
-    final normalizedSamples = _smartNormalize(clippedSamples);
+    switch (_preprocessingMode) {
+      case PreprocessingMode.conservative:
+        // Minimal processing - only essential steps
+        processedSamples = _preprocessConservative(audioSamples);
+        break;
+        
+      case PreprocessingMode.standard:
+        // Balanced processing - current implementation
+        processedSamples = _preprocessStandard(audioSamples);
+        break;
+        
+      case PreprocessingMode.aggressive:
+        // Maximum processing - for problematic audio
+        processedSamples = _preprocessAggressive(audioSamples);
+        break;
+    }
     
     // Save path for playback (don't delete file yet)
     _lastRecordingPath = path;
     
     print('✅ Returning processed audio samples');
-    return normalizedSamples;    } catch (e) {
+    return processedSamples;    } catch (e) {
       print('❌ Error stopping recording: $e');
       rethrow;
     }
@@ -309,6 +332,50 @@ class AudioRecordingService {
     return output;
   }
   
+  /// Conservative preprocessing - minimal processing for clean audio
+  Float32List _preprocessConservative(Float32List audioSamples) {
+    print('   📊 Conservative mode: Minimal processing');
+    
+    // Only trim silence and light normalization
+    final trimmedSamples = _trimSilence(audioSamples, threshold: 0.015); // More aggressive trim
+    print('   ✂️ Trimmed: ${audioSamples.length} → ${trimmedSamples.length} samples');
+    
+    // Very light normalization - target RMS 0.035 (higher, more natural)
+    final normalizedSamples = _smartNormalize(trimmedSamples, targetRMS: 0.035);
+    
+    return normalizedSamples;
+  }
+  
+  /// Standard preprocessing - balanced (current implementation)
+  Float32List _preprocessStandard(Float32List audioSamples) {
+    print('   📊 Standard mode: Balanced processing');
+    
+    final dcRemovedSamples = _removeDCOffset(audioSamples);
+    final trimmedSamples = _trimSilence(dcRemovedSamples, threshold: 0.01);
+    print('   ✂️ Trimmed: ${audioSamples.length} → ${trimmedSamples.length} samples');
+    
+    final filteredSamples = _applyHighPassFilter(trimmedSamples);
+    final clippedSamples = _applySoftClipping(filteredSamples, threshold: 0.6);
+    final normalizedSamples = _smartNormalize(clippedSamples, targetRMS: 0.0265);
+    
+    return normalizedSamples;
+  }
+  
+  /// Aggressive preprocessing - maximum processing for problematic audio
+  Float32List _preprocessAggressive(Float32List audioSamples) {
+    print('   📊 Aggressive mode: Maximum processing');
+    
+    final dcRemovedSamples = _removeDCOffset(audioSamples);
+    final trimmedSamples = _trimSilence(dcRemovedSamples, threshold: 0.008); // More sensitive
+    print('   ✂️ Trimmed: ${audioSamples.length} → ${trimmedSamples.length} samples');
+    
+    final filteredSamples = _applyHighPassFilter(trimmedSamples);
+    final clippedSamples = _applySoftClipping(filteredSamples, threshold: 0.5); // More aggressive
+    final normalizedSamples = _smartNormalize(clippedSamples, targetRMS: 0.022); // Lower target
+    
+    return normalizedSamples;
+  }
+  
   /// Apply soft clipping to compress loud peaks using tanh function
   /// This reduces dynamic range while preserving quieter sounds
   Float32List _applySoftClipping(Float32List audio, {double threshold = 0.6}) {
@@ -433,7 +500,7 @@ class AudioRecordingService {
   }
   
   /// Smart normalization - RMS-based to match file upload characteristics
-  Float32List _smartNormalize(Float32List audio) {
+  Float32List _smartNormalize(Float32List audio, {double targetRMS = 0.0265}) {
     if (audio.isEmpty) return audio;
     
     // Calculate RMS (Root Mean Square)
@@ -448,10 +515,10 @@ class AudioRecordingService {
       return audio;
     }
     
-    // Target RMS: 0.0265 to match file upload exactly
-    // File normal has RMS energy ~0.000704 = sqrt(0.000704) ≈ 0.0265
-    // This should produce Mel Spec Max ~400 and Mean dB ~-60
-    const double targetRMS = 0.0265;
+    // Target RMS: Adjustable based on preprocessing mode
+    // Conservative: 0.035 (higher, more natural)
+    // Standard: 0.0265 (current, matches file upload)
+    // Aggressive: 0.022 (lower, more compressed)
     
     // Calculate scale factor
     final scale = targetRMS / rms;
